@@ -1,0 +1,215 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SessionStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+  CANCELLED
+  FINISHED
+}
+
+enum BookingStatus {
+  CONFIRMED
+  CANCELLED
+  COURSE_CANCELLED
+  ATTENDED
+  LEAVE
+  ABSENT
+}
+
+enum NotificationType {
+  SESSION_RESCHEDULED
+  SESSION_CANCELLED
+}
+
+enum UserRole {
+  ADMIN
+  TEACHER
+  GUARDIAN
+}
+
+model Organization {
+  id         String          @id @default(cuid())
+  name       String
+  campuses   Campus[]
+  users      User[]
+  students   Student[]
+  courses    Course[]
+  classrooms Classroom[]
+  sessions   CourseSession[]
+  bookings   Booking[]
+  guardians  StudentGuardian[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+}
+
+model Campus {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  timezone       String          @default("Asia/Shanghai")
+  classrooms     Classroom[]
+  sessions       CourseSession[]
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, name])
+}
+
+model User {
+  id              String            @id @default(cuid())
+  organizationId  String
+  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role            UserRole
+  name            String
+  phone           String?
+  teacherSessions CourseSession[] @relation("SessionTeacher")
+  guardianLinks   StudentGuardian[]
+  notifications   Notification[]
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@unique([id, organizationId])
+  @@index([organizationId, role])
+}
+
+model Student {
+  id              String            @id @default(cuid())
+  organizationId  String
+  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name            String
+  guardianLinks   StudentGuardian[]
+  bookings        Booking[]
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@unique([id, organizationId])
+  @@index([organizationId, name])
+}
+
+model StudentGuardian {
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  studentId      String
+  student        Student      @relation(fields: [studentId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  guardianId     String
+  guardian       User         @relation(fields: [guardianId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@id([organizationId, studentId, guardianId])
+  @@index([organizationId, guardianId])
+}
+
+model Course {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  durationMinutes Int
+  sessions       CourseSession[]
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, name])
+}
+
+model Classroom {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campusId       String
+  campus         Campus          @relation(fields: [campusId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  name           String
+  capacity       Int
+  sessions       CourseSession[]
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, campusId, name])
+}
+
+model CourseSession {
+  id               String        @id @default(cuid())
+  organizationId   String
+  organization     Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  courseId         String
+  course           Course        @relation(fields: [courseId, organizationId], references: [id, organizationId])
+  campusId         String
+  campus           Campus        @relation(fields: [campusId, organizationId], references: [id, organizationId])
+  classroomId      String?
+  classroom        Classroom?    @relation(fields: [classroomId, organizationId], references: [id, organizationId])
+  teacherId        String
+  teacher          User          @relation("SessionTeacher", fields: [teacherId, organizationId], references: [id, organizationId])
+  startsAt         DateTime      @db.Timestamptz(3)
+  endsAt           DateTime      @db.Timestamptz(3)
+  capacity         Int
+  status           SessionStatus @default(PUBLISHED)
+  bookingOpensAt   DateTime      @db.Timestamptz(3)
+  bookingClosesAt  DateTime      @db.Timestamptz(3)
+  cancelDeadlineAt DateTime      @db.Timestamptz(3)
+  bookings         Booking[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@unique([id, organizationId])
+  @@index([organizationId, teacherId, startsAt, endsAt])
+  @@index([organizationId, classroomId, startsAt, endsAt])
+  @@index([organizationId, campusId, startsAt])
+}
+
+model Booking {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sessionId      String
+  session        CourseSession @relation(fields: [sessionId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  studentId      String
+  student        Student       @relation(fields: [studentId, organizationId], references: [id, organizationId])
+  status         BookingStatus @default(CONFIRMED)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, sessionId, studentId])
+  @@index([organizationId, studentId, status])
+}
+
+model Notification {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User             @relation(fields: [userId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  type           NotificationType
+  title          String
+  content        String
+  sessionId      String?
+  readAt         DateTime?
+  createdAt      DateTime         @default(now())
+
+  @@unique([id, organizationId])
+  @@index([organizationId, userId, readAt, createdAt])
+}
+
+model AuditLog {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actorId        String
+  action         String
+  entityType     String
+  entityId       String
+  details        Json
+  createdAt      DateTime     @default(now())
+
+  @@unique([id, organizationId])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, entityType, entityId])
+}

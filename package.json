@@ -1,0 +1,20 @@
+{
+  "name": "kebao",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "dev": "pnpm --filter @kebao/api dev",
+    "dev:api": "pnpm --filter @kebao/api dev",
+    "dev:admin": "pnpm --filter @kebao/admin-web dev",
+    "dev:miniapp": "pnpm --filter @kebao/miniapp dev",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:logs": "docker compose logs -f postgres",
+    "db:migrate": "pnpm --filter @kebao/api prisma:migrate",
+    "db:seed": "pnpm --filter @kebao/api prisma:seed",
+    "db:validate": "pnpm --filter @kebao/api prisma:validate",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "build": "pnpm -r build"
+  }
+}

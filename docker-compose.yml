@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-public.ecr.aws/docker/library/postgres:16-alpine}
+    container_name: kebao-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: kebao
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      TZ: Asia/Shanghai
+    ports:
+      - "5432:5432"
+    volumes:
+      - kebao-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d kebao"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  kebao-postgres-data:
