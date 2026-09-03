@@ -1,8 +1,9 @@
-import { Text, View } from "@tarojs/components";
+import { Button, Text, View } from "@tarojs/components";
 import Taro, { useDidShow, usePullDownRefresh } from "@tarojs/taro";
 import { useCallback, useState } from "react";
 import { getErrorMessage } from "../../api/client";
 import {
+  getSubscriptionConfig,
   listNotifications,
   markNotificationRead,
 } from "../../api/notifications";
@@ -20,6 +21,7 @@ export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingId, setPendingId] = useState("");
+  const [subscribing, setSubscribing] = useState(false);
 
   const load = useCallback(async (onlyUnread: boolean) => {
     setLoading(true);
@@ -59,6 +61,30 @@ export default function NotificationsPage() {
   };
 
   const unreadCount = notifications.filter((item) => !item.readAt).length;
+  const subscribe = async () => {
+    if (subscribing) return;
+    setSubscribing(true);
+    try {
+      const templateIds = await getSubscriptionConfig();
+      if (!templateIds.length) {
+        await Taro.showToast({ title: "机构尚未配置微信消息模板", icon: "none" });
+        return;
+      }
+      for (let index = 0; index < templateIds.length; index += 3) {
+        await (
+          Taro.requestSubscribeMessage as unknown as (
+            options: { tmplIds: string[] },
+          ) => Promise<unknown>
+        )({ tmplIds: templateIds.slice(index, index + 3) });
+      }
+      await Taro.showToast({ title: "提醒授权已更新", icon: "success" });
+    } catch (error) {
+      await Taro.showToast({ title: getErrorMessage(error), icon: "none" });
+    } finally {
+      setSubscribing(false);
+    }
+  };
+
   return (
     <View className="page">
       <View className="hero">
@@ -66,6 +92,18 @@ export default function NotificationsPage() {
         <Text className="hero-subtitle">
           {unreadCount ? `${unreadCount} 条未读消息` : "暂无未读消息"}
         </Text>
+      </View>
+      <View className="card">
+        <Text className="title">微信订阅消息</Text>
+        <Text className="muted">授权后可接收预约、调停课及开课提醒；微信可能按模板分批确认。</Text>
+        <Button
+          className="primary"
+          disabled={subscribing}
+          loading={subscribing}
+          onClick={() => void subscribe()}
+        >
+          开启微信提醒
+        </Button>
       </View>
       <View className="tabs">
         <View

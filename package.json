@@ -3,18 +3,24 @@
   "private": true,
   "packageManager": "pnpm@10.15.0",
   "scripts": {
-    "dev": "pnpm --filter @kebao/api dev",
-    "dev:api": "pnpm --filter @kebao/api dev",
-    "dev:admin": "pnpm --filter @kebao/admin-web dev",
-    "dev:miniapp": "pnpm --filter @kebao/miniapp dev",
+    "dev": "dotenv -e .env -- pnpm --filter @kebao/api dev",
+    "dev:api": "dotenv -e .env -- pnpm --filter @kebao/api dev",
+    "dev:admin": "dotenv -e .env -- pnpm --filter @kebao/admin-web dev",
+    "dev:miniapp": "dotenv -e .env -- pnpm --filter @kebao/miniapp dev",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
     "db:logs": "docker compose logs -f postgres",
-    "db:migrate": "pnpm --filter @kebao/api prisma:migrate",
-    "db:seed": "pnpm --filter @kebao/api prisma:seed",
-    "db:validate": "pnpm --filter @kebao/api prisma:validate",
+    "db:migrate": "dotenv -e .env -- pnpm --filter @kebao/api prisma:migrate",
+    "db:seed": "dotenv -e .env -- pnpm --filter @kebao/api prisma:seed",
+    "db:validate": "dotenv -e .env -- pnpm --filter @kebao/api prisma:validate",
+    "deploy:validate": "docker compose --env-file .env.production -f docker-compose.prod.yml config --quiet",
+    "db:backup": "sh ./scripts/backup-postgres.sh",
+    "db:restore": "sh ./scripts/restore-postgres.sh",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "build": "pnpm -r build"
+  },
+  "devDependencies": {
+    "dotenv-cli": "^8.0.0"
   }
 }

@@ -7,6 +7,7 @@ vi.mock("../src/api/client", () => ({
 }));
 
 import {
+  getSubscriptionConfig,
   listNotifications,
   markNotificationRead,
 } from "../src/api/notifications";
@@ -38,6 +39,20 @@ describe("站内通知 API 封装", () => {
     expect(requestMock).toHaveBeenCalledWith(
       "/notifications/notice%2F1/read",
       { method: "PATCH" },
+    );
+  });
+
+  it("读取微信订阅消息授权模板", async () => {
+    requestMock.mockResolvedValue({
+      data: { templateIds: ["template-booking", "template-reminder"] },
+    });
+
+    await expect(getSubscriptionConfig()).resolves.toEqual([
+      "template-booking",
+      "template-reminder",
+    ]);
+    expect(requestMock).toHaveBeenCalledWith(
+      "/notifications/subscription-config",
     );
   });
 });

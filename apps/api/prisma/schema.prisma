@@ -27,6 +27,18 @@ enum BookingStatus {
 enum NotificationType {
   SESSION_RESCHEDULED
   SESSION_CANCELLED
+  BOOKING_CONFIRMED
+  BOOKING_CANCELLED
+  SESSION_REMINDER_24H
+  SESSION_REMINDER_2H
+}
+
+enum NotificationDeliveryStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  SKIPPED
 }
 
 enum UserRole {
@@ -37,6 +49,7 @@ enum UserRole {
 
 model Organization {
   id         String          @id @default(cuid())
+  code       String          @unique
   name       String
   campuses   Campus[]
   users      User[]
@@ -44,12 +57,31 @@ model Organization {
   courses    Course[]
   classrooms Classroom[]
   sessions   CourseSession[]
+  scheduleSeries ScheduleSeries[]
   bookings   Booking[]
   guardians  StudentGuardian[]
   notifications Notification[]
+  notificationDeliveries NotificationDelivery[]
   auditLogs     AuditLog[]
+  authSessions  AuthSession[]
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
+}
+
+model ScheduleSeries {
+  id               String          @id @default(cuid())
+  organizationId   String
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  recurrence       String          @default("WEEKLY")
+  intervalWeeks    Int             @default(1)
+  requestedCount   Int
+  createdBy        String
+  sessions         CourseSession[]
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@unique([id, organizationId])
+  @@index([organizationId, createdAt])
 }
 
 model Campus {
@@ -57,9 +89,15 @@ model Campus {
   organizationId String
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name           String
+  address        String?
+  phone          String?
   timezone       String          @default("Asia/Shanghai")
+  isActive       Boolean         @default(true)
   classrooms     Classroom[]
+  students       Student[]
   sessions       CourseSession[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   @@unique([id, organizationId])
   @@unique([organizationId, name])
@@ -72,14 +110,40 @@ model User {
   role            UserRole
   name            String
   phone           String?
+  email           String?
+  specialty       String?
+  remark          String?
+  passwordHash    String?
+  wechatOpenId    String?
+  isActive        Boolean           @default(true)
+  lastLoginAt     DateTime?
   teacherSessions CourseSession[] @relation("SessionTeacher")
   guardianLinks   StudentGuardian[]
   notifications   Notification[]
+  notificationDeliveries NotificationDelivery[]
+  authSessions    AuthSession[]
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 
   @@unique([id, organizationId])
+  @@unique([organizationId, phone])
+  @@unique([organizationId, wechatOpenId])
   @@index([organizationId, role])
+}
+
+model AuthSession {
+  id               String       @id @default(cuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User         @relation(fields: [userId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  refreshTokenHash String       @unique
+  expiresAt        DateTime     @db.Timestamptz(3)
+  revokedAt        DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@index([organizationId, userId, expiresAt])
 }
 
 model Student {
@@ -87,6 +151,13 @@ model Student {
   organizationId  String
   organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name            String
+  phone           String?
+  gender          String?
+  birthDate       DateTime?         @db.Date
+  campusId        String?
+  campus          Campus?           @relation(fields: [campusId, organizationId], references: [id, organizationId])
+  remark          String?
+  isActive        Boolean           @default(true)
   guardianLinks   StudentGuardian[]
   bookings        Booking[]
   createdAt       DateTime          @default(now())
@@ -94,6 +165,7 @@ model Student {
 
   @@unique([id, organizationId])
   @@index([organizationId, name])
+  @@index([organizationId, campusId])
 }
 
 model StudentGuardian {
@@ -103,6 +175,8 @@ model StudentGuardian {
   student        Student      @relation(fields: [studentId, organizationId], references: [id, organizationId], onDelete: Cascade)
   guardianId     String
   guardian       User         @relation(fields: [guardianId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  relationship   String       @default("监护人")
+  isPrimary      Boolean      @default(false)
   createdAt      DateTime     @default(now())
 
   @@id([organizationId, studentId, guardianId])
@@ -114,11 +188,17 @@ model Course {
   organizationId String
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name           String
+  code           String?
   durationMinutes Int
+  description    String?
+  isActive       Boolean         @default(true)
   sessions       CourseSession[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   @@unique([id, organizationId])
   @@unique([organizationId, name])
+  @@unique([organizationId, code])
 }
 
 model Classroom {
@@ -128,11 +208,16 @@ model Classroom {
   campusId       String
   campus         Campus          @relation(fields: [campusId, organizationId], references: [id, organizationId], onDelete: Cascade)
   name           String
+  code           String?
   capacity       Int
+  isActive       Boolean         @default(true)
   sessions       CourseSession[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   @@unique([id, organizationId])
   @@unique([organizationId, campusId, name])
+  @@unique([organizationId, campusId, code])
 }
 
 model CourseSession {
@@ -154,6 +239,9 @@ model CourseSession {
   bookingOpensAt   DateTime      @db.Timestamptz(3)
   bookingClosesAt  DateTime      @db.Timestamptz(3)
   cancelDeadlineAt DateTime      @db.Timestamptz(3)
+  seriesId         String?
+  series            ScheduleSeries? @relation(fields: [seriesId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  occurrenceIndex  Int?
   bookings         Booking[]
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
@@ -162,6 +250,7 @@ model CourseSession {
   @@index([organizationId, teacherId, startsAt, endsAt])
   @@index([organizationId, classroomId, startsAt, endsAt])
   @@index([organizationId, campusId, startsAt])
+  @@unique([organizationId, seriesId, occurrenceIndex])
 }
 
 model Booking {
@@ -191,11 +280,39 @@ model Notification {
   title          String
   content        String
   sessionId      String?
+  idempotencyKey String?
+  deliveries     NotificationDelivery[]
   readAt         DateTime?
   createdAt      DateTime         @default(now())
 
   @@unique([id, organizationId])
+  @@unique([organizationId, idempotencyKey])
   @@index([organizationId, userId, readAt, createdAt])
+}
+
+model NotificationDelivery {
+  id             String                     @id @default(cuid())
+  organizationId String
+  organization   Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  notificationId String
+  notification   Notification               @relation(fields: [notificationId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  userId         String
+  user           User                       @relation(fields: [userId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  channel        String                     @default("WECHAT")
+  status         NotificationDeliveryStatus @default(PENDING)
+  attemptCount   Int                        @default(0)
+  lastError      String?
+  idempotencyKey String
+  payload        Json
+  nextAttemptAt  DateTime                   @default(now()) @db.Timestamptz(3)
+  sentAt         DateTime?
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, idempotencyKey])
+  @@index([status, nextAttemptAt])
+  @@index([organizationId, createdAt])
 }
 
 model AuditLog {

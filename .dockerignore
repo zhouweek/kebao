@@ -1,0 +1,15 @@
+.git
+.trae
+.env
+.env.*
+!.env.example
+node_modules
+**/node_modules
+**/dist
+**/.swc
+coverage
+*.log
+beta-development-plan
+course-scheduling-prd
+apps/miniapp/project.config.json
+apps/miniapp/project.private.config.json

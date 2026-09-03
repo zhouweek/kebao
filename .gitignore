@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!deploy/.env.production.example
 
 node_modules/
 apps/**/node_modules/
@@ -9,7 +10,9 @@ apps/**/node_modules/
 dist/
 apps/**/dist/
 apps/miniapp/.swc/
+apps/miniapp/project.private.config.json
 
+.trae/
 .trae-html-share-packages/
 entry-pass.html
 

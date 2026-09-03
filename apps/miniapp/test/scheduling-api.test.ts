@@ -10,9 +10,13 @@ import {
   bookSession,
   cancelBooking,
   cancelSession,
+  createSession,
+  createSeries,
+  getTeacherOptions,
   getRoster,
   listSessions,
   markAttendance,
+  previewSeries,
   rescheduleSession,
 } from "../src/api/scheduling";
 
@@ -35,6 +39,71 @@ describe("排课 API 封装", () => {
     expect(requestMock).toHaveBeenCalledWith(
       "/sessions?teacherId=teacher%201&campusId=A%2F%E6%A0%A1%E5%8C%BA&status=PUBLISHED",
     );
+  });
+
+  it("读取老师创建课次所需的启用选项", async () => {
+    const options = {
+      teacher: { id: "teacher-1", name: "王老师" },
+      courses: [],
+      campuses: [],
+      classrooms: [],
+    };
+    requestMock.mockResolvedValue({ data: options });
+
+    await expect(getTeacherOptions()).resolves.toBe(options);
+    expect(requestMock).toHaveBeenCalledWith("/teacher/options");
+  });
+
+  it("按契约创建课次", async () => {
+    const input = {
+      courseId: "course-1",
+      courseName: "编程",
+      campusId: "campus-1",
+      campusName: "北校区",
+      teacherId: "teacher-1",
+      teacherName: "王老师",
+      startsAt: "2026-09-04T02:00:00.000Z",
+      endsAt: "2026-09-04T03:00:00.000Z",
+      capacity: 12,
+    };
+    requestMock.mockResolvedValue({ data: { id: "session-1", ...input } });
+
+    await createSession(input);
+    expect(requestMock).toHaveBeenCalledWith("/sessions", {
+      method: "POST",
+      data: input,
+    });
+  });
+
+  it("预检并创建按周排课系列", async () => {
+    const input = {
+      courseId: "course-1",
+      courseName: "编程",
+      campusId: "campus-1",
+      campusName: "北校区",
+      teacherId: "teacher-1",
+      teacherName: "王老师",
+      startsAt: "2026-09-04T02:00:00.000Z",
+      endsAt: "2026-09-04T03:00:00.000Z",
+      capacity: 12,
+      recurrence: "WEEKLY" as const,
+      intervalWeeks: 1,
+      repeatCount: 8,
+      skipConflicts: true,
+    };
+    const result = { sessions: [], successDates: [], conflicts: [] };
+    requestMock.mockResolvedValue({ data: result });
+
+    await expect(previewSeries(input)).resolves.toBe(result);
+    expect(requestMock).toHaveBeenLastCalledWith("/session-series/preflight", {
+      method: "POST",
+      data: input,
+    });
+    await expect(createSeries(input)).resolves.toBe(result);
+    expect(requestMock).toHaveBeenLastCalledWith("/session-series", {
+      method: "POST",
+      data: input,
+    });
   });
 
   it("按后端契约发起预约并返回预约结果", async () => {

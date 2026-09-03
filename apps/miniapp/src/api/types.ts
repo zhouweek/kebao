@@ -24,6 +24,8 @@ export interface CourseSession {
   cancelDeadlineAt: string;
   bookedCount: number;
   remainingCapacity: number;
+  seriesId?: string | null;
+  occurrenceIndex?: number | null;
 }
 
 export interface Booking {
@@ -57,9 +59,67 @@ export interface RescheduleSessionInput {
   teacherName?: string;
   classroomId?: string | null;
   classroomName?: string | null;
+  scope?: "THIS" | "THIS_AND_FUTURE";
 }
 
-export type NotificationType = "SESSION_RESCHEDULED" | "SESSION_CANCELLED";
+export interface TeacherOption {
+  id: string;
+  name: string;
+}
+
+export interface CourseOption extends TeacherOption {
+  durationMinutes?: number;
+}
+
+export interface CampusOption extends TeacherOption {}
+
+export interface ClassroomOption extends TeacherOption {
+  campusId: string;
+  capacity?: number;
+}
+
+export interface TeacherOptions {
+  teacher: TeacherOption;
+  courses: CourseOption[];
+  campuses: CampusOption[];
+  classrooms: ClassroomOption[];
+}
+
+export interface CreateSessionInput {
+  courseId: string;
+  courseName: string;
+  campusId: string;
+  campusName: string;
+  classroomId?: string | null;
+  classroomName?: string | null;
+  teacherId: string;
+  teacherName: string;
+  startsAt: string;
+  endsAt: string;
+  capacity: number;
+  status?: SessionStatus;
+}
+
+export interface CreateSeriesInput extends CreateSessionInput {
+  recurrence: "WEEKLY";
+  intervalWeeks: number;
+  repeatCount: number;
+  skipConflicts: boolean;
+}
+
+export interface SeriesResult {
+  sessions: CourseSession[];
+  successDates: string[];
+  conflicts: Array<{ date: string }>;
+}
+
+export type NotificationType =
+  | "SESSION_RESCHEDULED"
+  | "SESSION_CANCELLED"
+  | "BOOKING_CONFIRMED"
+  | "BOOKING_CANCELLED"
+  | "SESSION_REMINDER_24H"
+  | "SESSION_REMINDER_2H";
 
 export interface Notification {
   id: string;

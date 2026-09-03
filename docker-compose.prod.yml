@@ -1,0 +1,91 @@
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-public.ecr.aws/docker/library/postgres:16-alpine}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-kebao}
+      POSTGRES_USER: ${POSTGRES_USER:-kebao}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      TZ: Asia/Shanghai
+    volumes:
+      - kebao-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [backend]
+    security_opt: [no-new-privileges:true]
+
+  api:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:?AUTH_TOKEN_SECRET is required}
+      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS is required}
+      METRICS_TOKEN: ${METRICS_TOKEN:?METRICS_TOKEN is required}
+      TRUST_PROXY: "true"
+      DEV_IDENTITY_ENABLED: "false"
+      PORT: "3000"
+      HOST: "0.0.0.0"
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-300}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
+      NOTIFICATION_WORKER_INTERVAL_MS: ${NOTIFICATION_WORKER_INTERVAL_MS:-60000}
+      WECHAT_APP_ID: ${WECHAT_APP_ID:-}
+      WECHAT_APP_SECRET: ${WECHAT_APP_SECRET:-}
+      WECHAT_TEMPLATE_BOOKING_CONFIRMED: ${WECHAT_TEMPLATE_BOOKING_CONFIRMED:-}
+      WECHAT_TEMPLATE_BOOKING_CANCELLED: ${WECHAT_TEMPLATE_BOOKING_CANCELLED:-}
+      WECHAT_TEMPLATE_SESSION_RESCHEDULED: ${WECHAT_TEMPLATE_SESSION_RESCHEDULED:-}
+      WECHAT_TEMPLATE_SESSION_CANCELLED: ${WECHAT_TEMPLATE_SESSION_CANCELLED:-}
+      WECHAT_TEMPLATE_SESSION_REMINDER_24H: ${WECHAT_TEMPLATE_SESSION_REMINDER_24H:-}
+      WECHAT_TEMPLATE_SESSION_REMINDER_2H: ${WECHAT_TEMPLATE_SESSION_REMINDER_2H:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks: [backend]
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ${TLS_CERT_DIR:?TLS_CERT_DIR is required}:/etc/nginx/tls:ro
+    networks: [backend]
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+    security_opt: [no-new-privileges:true]
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  kebao-postgres-data:

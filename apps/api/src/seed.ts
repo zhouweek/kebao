@@ -1,17 +1,77 @@
 import type { MemorySeed } from "./memory-repository.js";
+import { hashPasswordForDevelopment } from "./auth.js";
 
 export function createDevelopmentSeed(now = new Date()): MemorySeed {
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
   tomorrow.setHours(10, 0, 0, 0);
   const end = new Date(tomorrow.getTime() + 90 * 60 * 1000);
+  const createdAt = new Date(now);
 
   return {
-    organizations: ["org-development"],
+    organizations: [{ id: "org-development", code: "DEMO" }],
+    masterData: {
+      campuses: [
+        {
+          id: "campus-a",
+          name: "A 校区",
+          address: "示例市中心路 1 号",
+          phone: "010-88886666",
+          timezone: "Asia/Shanghai",
+          isActive: true,
+          createdAt,
+          updatedAt: createdAt,
+        },
+      ],
+      classrooms: [
+        {
+          id: "room-105",
+          name: "105 教室",
+          code: "A-105",
+          campusId: "campus-a",
+          campusName: "A 校区",
+          capacity: 12,
+          isActive: true,
+          createdAt,
+          updatedAt: createdAt,
+        },
+      ],
+      courses: [
+        {
+          id: "course-coding-l2",
+          name: "少儿编程 L2",
+          code: "CODING-L2",
+          durationMinutes: 90,
+          description: "进阶编程课程",
+          isActive: true,
+          createdAt,
+          updatedAt: createdAt,
+        },
+      ],
+    },
     users: [
-      { id: "admin-1", organizationId: "org-development", role: "ADMIN" },
-      { id: "teacher-1", organizationId: "org-development", role: "TEACHER" },
-      { id: "student-1", organizationId: "org-development", role: "GUARDIAN" },
+      {
+        id: "admin-1",
+        organizationId: "org-development",
+        role: "ADMIN",
+        name: "开发管理员",
+        phone: "13800000001",
+        passwordHash: hashPasswordForDevelopment("Admin123!"),
+      },
+      {
+        id: "teacher-1",
+        organizationId: "org-development",
+        role: "TEACHER",
+        name: "王老师",
+        phone: "13800000002",
+      },
+      {
+        id: "student-1",
+        organizationId: "org-development",
+        role: "GUARDIAN",
+        name: "林小满家长",
+        phone: "13800001001",
+      },
     ],
     guardians: [
       {

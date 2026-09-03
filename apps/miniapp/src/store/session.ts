@@ -15,8 +15,15 @@ export interface SavedBooking {
   classroomName: string | null;
 }
 
+export interface AuthState {
+  accessToken: string;
+  refreshToken: string;
+  accessTokenExpiresIn: number;
+}
+
 const IDENTITY_KEY = "kebao.identity";
 const BOOKINGS_KEY = "kebao.bookings";
+const AUTH_KEY = "kebao.auth";
 
 export function saveIdentity(identity: Identity): void {
   Taro.setStorageSync(IDENTITY_KEY, identity);
@@ -24,6 +31,18 @@ export function saveIdentity(identity: Identity): void {
 
 export function getIdentity(): Identity | undefined {
   return Taro.getStorageSync<Identity>(IDENTITY_KEY) || undefined;
+}
+
+export function saveAuth(auth: AuthState): void {
+  Taro.setStorageSync(AUTH_KEY, auth);
+}
+
+export function getAuth(): AuthState | undefined {
+  return Taro.getStorageSync<AuthState>(AUTH_KEY) || undefined;
+}
+
+export function clearAuth(): void {
+  Taro.removeStorageSync(AUTH_KEY);
 }
 
 export function getSavedBookings(): SavedBooking[] {

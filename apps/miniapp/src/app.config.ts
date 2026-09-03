@@ -3,6 +3,7 @@ export default defineAppConfig({
     "pages/identity/index",
     "pages/parent/index",
     "pages/teacher/index",
+    "pages/teacher-create/index",
     "pages/session/index",
     "pages/roster/index",
     "pages/notifications/index",

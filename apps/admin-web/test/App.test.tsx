@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../src/App";
 
 const session = {
@@ -23,11 +23,108 @@ const session = {
   remainingCapacity: 7,
 };
 
+const masterItems: Record<string, Array<Record<string, unknown>>> = {
+  courses: [{ id: "course-coding-l2", name: "少儿编程 L2", isActive: true }],
+  campuses: [{ id: "campus-a", name: "A 校区", isActive: true }],
+  teachers: [{ id: "teacher-1", name: "王老师", isActive: true }],
+  classrooms: [{
+    id: "room-105",
+    name: "105 教室",
+    campusId: "campus-a",
+    isActive: true,
+  }],
+  guardians: [],
+  students: [{ id: "student-1", name: "学生甲", isActive: true }],
+};
+
+function masterResponse(input: RequestInfo | URL) {
+  const match = String(input).match(/^\/admin\/([^?]+)/);
+  if (!match) return undefined;
+  const items = masterItems[match[1]!] ?? [];
+  return new Response(JSON.stringify({
+    data: { items, page: 1, pageSize: 100, total: items.length },
+  }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+beforeEach(() => {
+  localStorage.setItem(
+    "kebao.admin.auth",
+    JSON.stringify({
+      accessToken: "access-token",
+      refreshToken: "refresh-token",
+      accessTokenExpiresIn: 900,
+      user: {
+        id: "admin-1",
+        organizationId: "org-development",
+        role: "ADMIN",
+        name: "管理员",
+        phone: "13800000001",
+      },
+    }),
+  );
+});
+
 describe("管理后台", () => {
+  it("未登录时展示手机号密码登录并在成功后加载课次", async () => {
+    localStorage.clear();
+    const fetcher = vi.fn(async (input: RequestInfo | URL) =>
+      new Response(
+        JSON.stringify(
+          input === "/auth/admin/login"
+            ? {
+                data: {
+                  accessToken: "new-access",
+                  refreshToken: "new-refresh",
+                  accessTokenExpiresIn: 900,
+                  user: {
+                    id: "admin-1",
+                    organizationId: "org-development",
+                    role: "ADMIN",
+                    name: "管理员",
+                    phone: "13800000001",
+                  },
+                },
+              }
+            : { data: [session] },
+        ),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText("机构编码"), {
+      target: { value: "DEMO" },
+    });
+    fireEvent.change(screen.getByLabelText("手机号"), {
+      target: { value: "13800000001" },
+    });
+    fireEvent.change(screen.getByLabelText("密码"), {
+      target: { value: "Admin123!" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "登录" }));
+
+    expect(await screen.findByText("少儿编程 L2")).toBeInTheDocument();
+    expect(fetcher).toHaveBeenCalledWith(
+      "/auth/admin/login",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          organizationCode: "DEMO",
+          phone: "13800000001",
+          password: "Admin123!",
+        }),
+      }),
+    );
+  });
+
   it("展示概览和 GET /sessions 返回的课次", async () => {
     const fetcher = vi.fn(async () =>
       new Response(JSON.stringify({ data: [session] }), {
@@ -48,6 +145,8 @@ describe("管理后台", () => {
 
   it("提交冲突时展示服务端错误和冲突课次", async () => {
     const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const referenceData = masterResponse(_input);
+      if (referenceData) return referenceData;
       if (init?.method === "POST") {
         return new Response(
           JSON.stringify({
@@ -78,13 +177,40 @@ describe("管理后台", () => {
     render(<App />);
     await screen.findByText("少儿编程 L2");
     fireEvent.click(screen.getByRole("button", { name: "创建课次" }));
-    fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
+    fireEvent.click(await screen.findByRole("button", { name: "确认创建" }));
 
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent("排课时间有冲突"),
     );
     expect(screen.getByRole("alert")).toHaveTextContent("老师冲突、教室冲突");
     expect(screen.getByRole("alert")).toHaveTextContent("少儿编程 L2");
+  });
+
+  it("从管理接口加载排课选项并展示基础资料页面", async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const referenceData = masterResponse(input);
+      if (referenceData) return referenceData;
+      return new Response(JSON.stringify({ data: [session] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetcher);
+    render(<App />);
+    await screen.findByText("少儿编程 L2");
+
+    fireEvent.click(screen.getByRole("button", { name: "创建课次" }));
+    expect(await screen.findByRole("option", { name: "A 校区" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "王老师" })).toBeInTheDocument();
+    expect(fetcher).toHaveBeenCalledWith(
+      "/admin/courses?pageSize=100&activeOnly=true",
+      expect.any(Object),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+    fireEvent.click(screen.getByRole("button", { name: "校区管理" }));
+    expect(await screen.findByRole("heading", { name: "校区管理" })).toBeInTheDocument();
+    expect((await screen.findAllByText("A 校区")).length).toBeGreaterThan(0);
   });
 
   it("在课次管理中提交停课原因", async () => {
@@ -114,6 +240,80 @@ describe("管理后台", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ reason: "老师请假" }),
+      }),
+    ));
+  });
+
+  it("在预约管理中筛选并提交代预约和带原因的代取消", async () => {
+    const booking = {
+      id: "booking-1",
+      sessionId: "session-1",
+      studentId: "student-1",
+      status: "CONFIRMED",
+      createdAt: "2099-09-01T02:00:00.000Z",
+      session: {
+        id: "session-1",
+        courseId: "course-coding-l2",
+        courseName: "少儿编程 L2",
+        startsAt: session.startsAt,
+        endsAt: session.endsAt,
+        status: "PUBLISHED",
+      },
+      student: { id: "student-1", name: "学生甲", guardianPhone: "138****0001" },
+      teacher: { id: "teacher-1", name: "王老师" },
+    };
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).startsWith("/admin/bookings")) {
+        const data = init?.method === "POST"
+          ? String(input).endsWith("/cancel")
+            ? { ...booking, status: "CANCELLED" }
+            : { booking, alreadyBooked: false }
+          : { items: [booking], page: 1, pageSize: 10, total: 1 };
+        return new Response(JSON.stringify({ data }), {
+          status: init?.method === "POST" ? 201 : 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      const referenceData = masterResponse(input);
+      if (referenceData) return referenceData;
+      return new Response(JSON.stringify({ data: [session] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetcher);
+    render(<App />);
+    await screen.findByText("少儿编程 L2");
+
+    fireEvent.click(screen.getByRole("button", { name: "预约管理" }));
+    expect((await screen.findAllByText("学生甲")).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "查询" }));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith(
+      "/admin/bookings?page=1&pageSize=10",
+      expect.any(Object),
+    ));
+
+    fireEvent.click(screen.getByRole("button", { name: "代预约" }));
+    fireEvent.click(await screen.findByRole("button", { name: "确认代预约" }));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith(
+      "/admin/bookings",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ sessionId: "session-1", studentId: "student-1" }),
+      }),
+    ));
+
+    fireEvent.click(screen.getByRole("button", { name: "代取消" }));
+    expect(screen.getByRole("button", { name: "确认代取消" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("取消原因"), {
+      target: { value: "家长电话申请" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "确认代取消" }));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith(
+      "/admin/bookings/booking-1/cancel",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ reason: "家长电话申请" }),
       }),
     ));
   });

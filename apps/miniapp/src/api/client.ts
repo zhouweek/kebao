@@ -1,5 +1,5 @@
 import Taro from "@tarojs/taro";
-import { getIdentity } from "../store/session";
+import { getAuth, getIdentity } from "../store/session";
 import type { ApiErrorBody } from "./types";
 
 const DEFAULT_BASE_URL = "http://localhost:3000";
@@ -23,15 +23,24 @@ export async function request<T>(
   const baseUrl =
     (process.env.TARO_APP_API_BASE_URL || DEFAULT_BASE_URL).replace(/\/$/, "");
   const identity = getIdentity();
+  const auth = getAuth();
   const hasData = options.data !== undefined;
+  const developmentIdentityEnabled =
+    process.env.TARO_APP_DEV_IDENTITY_ENABLED === "true";
   const response = await Taro.request<T | ApiErrorBody>({
     ...options,
     url: `${baseUrl}${path}`,
     header: {
       ...(hasData ? { "content-type": "application/json" } : {}),
-      "x-tenant-id": "org-development",
-      "x-role": identity?.role === "teacher" ? "TEACHER" : "GUARDIAN",
-      "x-user-id": identity?.id ?? "student-1",
+      ...(auth?.accessToken
+        ? { Authorization: `Bearer ${auth.accessToken}` }
+        : developmentIdentityEnabled
+          ? {
+              "x-tenant-id": "org-development",
+              "x-role": identity?.role === "teacher" ? "TEACHER" : "GUARDIAN",
+              "x-user-id": identity?.id ?? "student-1",
+            }
+          : {}),
       ...options.header,
     },
   });

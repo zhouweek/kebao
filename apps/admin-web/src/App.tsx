@@ -5,21 +5,45 @@ import {
   AuditLog,
   CourseSession,
   CreateSessionInput,
+  CreateSeriesInput,
   Notification,
+  NotificationDelivery,
   RosterStudent,
   SessionStatus,
+  MasterDataItem,
+  MasterResource,
   cancelSession,
   createSession,
+  createSeries,
+  previewSeries,
   getAuditLogs,
   getNotifications,
+  getNotificationDeliveries,
   getRoster,
   getSessions,
+  getMasterData,
+  hasAuth,
+  isDevelopmentIdentityEnabled,
+  loginAdmin,
+  logout,
   markNotificationRead,
   rescheduleSession,
+  resendNotificationDelivery,
   updateAttendance,
 } from "./api";
+import { MasterDataView } from "./MasterDataView";
+import { BookingManagementView } from "./BookingManagementView";
+import { AnalyticsView } from "./AnalyticsView";
 
-type View = "overview" | "sessions" | "notifications" | "audit";
+type View =
+  | "overview"
+  | "sessions"
+  | "bookings"
+  | "analytics"
+  | "notifications"
+  | "deliveries"
+  | "audit"
+  | MasterResource;
 type Operation = "reschedule" | "cancel" | "attendance";
 
 interface Option {
@@ -37,6 +61,9 @@ interface FormState {
   endsAt: string;
   capacity: string;
   status: SessionStatus;
+  repeatMode: "ONCE" | "WEEKLY";
+  repeatCount: string;
+  skipConflicts: boolean;
 }
 
 interface RescheduleFormState {
@@ -47,25 +74,16 @@ interface RescheduleFormState {
   classroom: string;
 }
 
-const courses: Option[] = [
-  { id: "course-coding-l2", name: "少儿编程 L2" },
-  { id: "course-art", name: "创意美术" },
-  { id: "course-math", name: "思维数学" },
-];
-const campuses: Option[] = [
-  { id: "campus-a", name: "A 校区" },
-  { id: "campus-b", name: "B 校区" },
-];
-const teachers: Option[] = [
-  { id: "teacher-1", name: "王老师" },
-  { id: "teacher-2", name: "李老师" },
-  { id: "teacher-3", name: "陈老师" },
-];
-const classrooms: Option[] = [
-  { id: "room-105", name: "105 教室" },
-  { id: "room-201", name: "201 教室" },
-  { id: "room-302", name: "302 教室" },
-];
+const masterLabels: Record<MasterResource, string> = {
+  campuses: "校区管理",
+  classrooms: "教室管理",
+  courses: "课程管理",
+  teachers: "老师管理",
+  guardians: "家长管理",
+  students: "学生管理",
+};
+
+const masterResources = Object.keys(masterLabels) as MasterResource[];
 
 const statusLabel: Record<SessionStatus, string> = {
   DRAFT: "草稿",
@@ -89,6 +107,8 @@ const auditActionLabel: Record<string, string> = {
   NOTIFICATION_READ: "读取通知",
   BOOKING_CREATED: "创建预约",
   BOOKING_CANCELLED: "取消预约",
+  ADMIN_BOOKING_CREATED: "管理员代预约",
+  ADMIN_BOOKING_CANCELLED: "管理员代取消",
 };
 
 function toDateInput(date: Date) {
@@ -100,15 +120,18 @@ function initialForm(): FormState {
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   return {
-    course: courses[0]!.id,
-    campus: campuses[0]!.id,
-    teacher: teachers[0]!.id,
-    classroom: classrooms[0]!.id,
+    course: "",
+    campus: "",
+    teacher: "",
+    classroom: "",
     date: toDateInput(tomorrow),
     startsAt: "10:00",
     endsAt: "11:30",
     capacity: "12",
     status: "PUBLISHED",
+    repeatMode: "ONCE",
+    repeatCount: "4",
+    skipConflicts: false,
   };
 }
 
@@ -153,6 +176,14 @@ function timeText(value: string) {
 }
 
 function App() {
+  const [authenticated, setAuthenticated] = useState(
+    () => hasAuth() || isDevelopmentIdentityEnabled(),
+  );
+  const [loginOrganizationCode, setLoginOrganizationCode] = useState("");
+  const [loginPhone, setLoginPhone] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [loginSubmitting, setLoginSubmitting] = useState(false);
   const [view, setView] = useState<View>("overview");
   const [sessions, setSessions] = useState<CourseSession[]>([]);
   const [loading, setLoading] = useState(true);
@@ -163,15 +194,50 @@ function App() {
   const [submitError, setSubmitError] = useState<ApiError | null>(null);
   const [success, setSuccess] = useState("");
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [deliveries, setDeliveries] = useState<NotificationDelivery[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [operation, setOperation] = useState<Operation | null>(null);
   const [selectedSession, setSelectedSession] = useState<CourseSession | null>(null);
   const [operationError, setOperationError] = useState("");
   const [operationSubmitting, setOperationSubmitting] = useState(false);
   const [reason, setReason] = useState("");
+  const [operationScope, setOperationScope] = useState<"THIS" | "THIS_AND_FUTURE">("THIS");
   const [rescheduleForm, setRescheduleForm] = useState<RescheduleFormState | null>(null);
   const [roster, setRoster] = useState<RosterStudent[]>([]);
   const [attendance, setAttendance] = useState<Record<string, AttendanceStatus>>({});
+  const [masterLookups, setMasterLookups] = useState<Record<MasterResource, MasterDataItem[]>>({
+    campuses: [],
+    classrooms: [],
+    courses: [],
+    teachers: [],
+    guardians: [],
+    students: [],
+  });
+  const courses = masterLookups.courses;
+  const campuses = masterLookups.campuses;
+  const teachers = masterLookups.teachers;
+  const classrooms = masterLookups.classrooms.filter(
+    (item) => !form.campus || item.campusId === form.campus,
+  );
+
+  const loadMasterLookups = async () => {
+    const resources: MasterResource[] = [
+      "campuses",
+      "classrooms",
+      "courses",
+      "teachers",
+      "guardians",
+      "students",
+    ];
+    const results = await Promise.all(
+      resources.map(async (resource) => [
+        resource,
+        (await getMasterData(resource, { pageSize: 100, activeOnly: true })).items,
+      ] as const),
+    );
+    setMasterLookups((current) => ({ ...current, ...Object.fromEntries(results) }));
+    return Object.fromEntries(results) as Partial<Record<MasterResource, MasterDataItem[]>>;
+  };
 
   const loadSessions = async () => {
     setLoading(true);
@@ -186,8 +252,26 @@ function App() {
   };
 
   useEffect(() => {
-    void loadSessions();
-  }, []);
+    if (authenticated) void loadSessions();
+  }, [authenticated]);
+
+  const submitLogin = async (event: FormEvent) => {
+    event.preventDefault();
+    setLoginSubmitting(true);
+    setLoginError("");
+    try {
+      await loginAdmin(
+        loginOrganizationCode.trim(),
+        loginPhone.trim(),
+        loginPassword,
+      );
+      setAuthenticated(true);
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : "登录失败");
+    } finally {
+      setLoginSubmitting(false);
+    }
+  };
 
   const loadNotifications = async () => {
     setLoading(true);
@@ -213,10 +297,26 @@ function App() {
     }
   };
 
+  const loadDeliveries = async () => {
+    setLoading(true);
+    setLoadError("");
+    try {
+      setDeliveries(await getNotificationDeliveries());
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "投递记录加载失败");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const changeView = (next: View) => {
     setView(next);
     if (next === "notifications") void loadNotifications();
+    if (next === "deliveries") void loadDeliveries();
     if (next === "audit") void loadAuditLogs();
+    if (next === "bookings") void loadMasterLookups();
+    if (next === "analytics") void loadMasterLookups();
+    if (masterResources.includes(next as MasterResource)) void loadMasterLookups();
   };
 
   const notifySuccess = (message: string) => {
@@ -229,13 +329,14 @@ function App() {
     setOperation(kind);
     setOperationError("");
     setReason("");
+    setOperationScope("THIS");
     const start = new Date(session.startsAt);
     setRescheduleForm({
       date: toDateInput(start),
       startsAt: timeText(session.startsAt),
       endsAt: timeText(session.endsAt),
       teacher: session.teacherId,
-      classroom: session.classroomId ?? classrooms[0]!.id,
+      classroom: session.classroomId ?? "",
     });
     if (kind === "attendance") {
       setOperationSubmitting(true);
@@ -271,11 +372,12 @@ function App() {
     setOperationError("");
     try {
       if (operation === "cancel") {
-        await cancelSession(selectedSession.id, reason.trim());
+        await cancelSession(selectedSession.id, reason.trim(), fetch, operationScope);
         notifySuccess("停课成功，相关预约已同步处理");
       } else if (operation === "reschedule" && rescheduleForm) {
-        const teacher = teachers.find((item) => item.id === rescheduleForm.teacher)!;
-        const classroom = classrooms.find((item) => item.id === rescheduleForm.classroom)!;
+        const teacher = teachers.find((item) => item.id === rescheduleForm.teacher);
+        const classroom = masterLookups.classrooms.find((item) => item.id === rescheduleForm.classroom);
+        if (!teacher || !classroom) throw new Error("请选择有效的老师和教室");
         await rescheduleSession(selectedSession.id, {
           startsAt: new Date(`${rescheduleForm.date}T${rescheduleForm.startsAt}`).toISOString(),
           endsAt: new Date(`${rescheduleForm.date}T${rescheduleForm.endsAt}`).toISOString(),
@@ -283,6 +385,7 @@ function App() {
           teacherName: teacher.name,
           classroomId: classroom.id,
           classroomName: classroom.name,
+          scope: operationScope,
         });
         notifySuccess("调课成功，家长将收到通知");
       } else if (operation === "attendance") {
@@ -334,19 +437,35 @@ function App() {
     setSubmitError(null);
   };
 
-  const openCreate = () => {
-    setForm(initialForm());
+  const openCreate = async () => {
     setSubmitError(null);
-    setDialogOpen(true);
+    try {
+      const lookups = await loadMasterLookups();
+      const next = initialForm();
+      next.course = lookups.courses?.[0]?.id ?? "";
+      next.campus = lookups.campuses?.[0]?.id ?? "";
+      next.teacher = lookups.teachers?.[0]?.id ?? "";
+      next.classroom = lookups.classrooms?.find(
+        (item) => item.campusId === next.campus,
+      )?.id ?? "";
+      setForm(next);
+      setDialogOpen(true);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "排课基础资料加载失败");
+    }
   };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setSubmitError(null);
-    const course = courses.find((item) => item.id === form.course)!;
-    const campus = campuses.find((item) => item.id === form.campus)!;
-    const teacher = teachers.find((item) => item.id === form.teacher)!;
-    const classroom = classrooms.find((item) => item.id === form.classroom)!;
+    const course = courses.find((item) => item.id === form.course);
+    const campus = campuses.find((item) => item.id === form.campus);
+    const teacher = teachers.find((item) => item.id === form.teacher);
+    const classroom = masterLookups.classrooms.find((item) => item.id === form.classroom);
+    if (!course || !campus || !teacher || !classroom) {
+      setSubmitError(new ApiError("请选择有效的课程、校区、老师和教室", "INVALID_MASTER_DATA", 400));
+      return;
+    }
     const input: CreateSessionInput = {
       courseId: course.id,
       courseName: course.name,
@@ -363,11 +482,36 @@ function App() {
     };
     setSubmitting(true);
     try {
-      await createSession(input);
+      if (form.repeatMode === "WEEKLY") {
+        const seriesInput: CreateSeriesInput = {
+          ...input,
+          recurrence: "WEEKLY",
+          intervalWeeks: 1,
+          repeatCount: Number(form.repeatCount),
+          skipConflicts: form.skipConflicts,
+        };
+        const preview = await previewSeries(seriesInput);
+        if (preview.conflicts.length && !form.skipConflicts) {
+          throw new ApiError(
+            "系列中存在冲突日期，默认不会创建任何课次",
+            "SERIES_CONFLICT",
+            409,
+            { conflicts: preview.conflicts },
+          );
+        }
+        const result = await createSeries(seriesInput);
+        setSuccess(
+          result.conflicts.length
+            ? `已创建 ${result.sessions.length} 节，跳过 ${result.conflicts.length} 个冲突日期`
+            : `系列创建成功，共 ${result.sessions.length} 节`,
+        );
+      } else {
+        await createSession(input);
+        setSuccess("课次创建成功");
+      }
       await loadSessions();
       setDialogOpen(false);
       setView("sessions");
-      setSuccess("课次创建成功");
       window.setTimeout(() => setSuccess(""), 3000);
     } catch (error) {
       setSubmitError(
@@ -383,6 +527,48 @@ function App() {
   const upcoming = [...sessions]
     .filter((item) => new Date(item.endsAt) > new Date())
     .sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
+
+  if (!authenticated) {
+    return (
+      <main className="login-page">
+        <form className="login-card" onSubmit={(event) => void submitLogin(event)}>
+          <p className="eyebrow">课宝教学运营中心</p>
+          <h1>管理员登录</h1>
+          {loginError && <div className="load-error" role="alert">{loginError}</div>}
+          <Field label="机构编码">
+            <input
+              autoComplete="organization"
+              required
+              value={loginOrganizationCode}
+              onChange={(event) => setLoginOrganizationCode(event.target.value)}
+            />
+          </Field>
+          <Field label="手机号">
+            <input
+              autoComplete="username"
+              inputMode="tel"
+              required
+              value={loginPhone}
+              onChange={(event) => setLoginPhone(event.target.value)}
+            />
+          </Field>
+          <Field label="密码">
+            <input
+              autoComplete="current-password"
+              minLength={8}
+              required
+              type="password"
+              value={loginPassword}
+              onChange={(event) => setLoginPassword(event.target.value)}
+            />
+          </Field>
+          <button className="primary-button" disabled={loginSubmitting} type="submit">
+            {loginSubmitting ? "正在登录…" : "登录"}
+          </button>
+        </form>
+      </main>
+    );
+  }
 
   return (
     <div className="app-shell">
@@ -415,12 +601,47 @@ function App() {
             课次管理
           </button>
           <button
+            className={view === "bookings" ? "nav-item active" : "nav-item"}
+            onClick={() => changeView("bookings")}
+          >
+            <Icon>
+              <path d="M4 7h16v13H4zM8 7V4h8v3M8 12h8M8 16h5" />
+            </Icon>
+            预约管理
+          </button>
+          <button
+            className={view === "analytics" ? "nav-item active" : "nav-item"}
+            onClick={() => changeView("analytics")}
+          >
+            <Icon>
+              <path d="M3 3v18h18M7 16l4-5 3 3 5-7" />
+            </Icon>
+            经营统计
+          </button>
+          {masterResources.map((resource) => (
+            <button
+              key={resource}
+              className={view === resource ? "nav-item active" : "nav-item"}
+              onClick={() => changeView(resource)}
+            >
+              <Icon><path d="M4 5h16M4 12h16M4 19h16M8 3v4M16 10v4M10 17v4" /></Icon>
+              {masterLabels[resource]}
+            </button>
+          ))}
+          <button
             className={view === "notifications" ? "nav-item active" : "nav-item"}
             onClick={() => changeView("notifications")}
           >
             <Icon><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></Icon>
             站内通知
             {notifications.some((item) => !item.readAt) && <span className="nav-dot" />}
+          </button>
+          <button
+            className={view === "deliveries" ? "nav-item active" : "nav-item"}
+            onClick={() => changeView("deliveries")}
+          >
+            <Icon><path d="M4 4h16v16H4zM4 8l8 5 8-5M8 17h8" /></Icon>
+            通知投递
           </button>
           <button
             className={view === "audit" ? "nav-item active" : "nav-item"}
@@ -433,7 +654,13 @@ function App() {
         <div className="sidebar-foot">
           <span className="avatar">林</span>
           <span><b>林校长</b><small>超级管理员</small></span>
-          <span className="more">•••</span>
+          <button
+            className="more"
+            aria-label="退出登录"
+            onClick={() => void logout().finally(() => setAuthenticated(false))}
+          >
+            退出
+          </button>
         </div>
       </aside>
 
@@ -441,7 +668,7 @@ function App() {
         <header className="topbar">
           <div>
             <p className="eyebrow">教学运营中心</p>
-            <h1>{view === "overview" ? "上午好，林校长" : view === "sessions" ? "课次管理" : view === "notifications" ? "站内通知" : "审计日志"}</h1>
+            <h1>{view === "overview" ? "上午好，林校长" : view === "sessions" ? "课次管理" : view === "bookings" ? "预约管理" : view === "analytics" ? "经营统计" : view === "notifications" ? "站内通知" : view === "deliveries" ? "通知投递" : view === "audit" ? "审计日志" : masterLabels[view]}</h1>
           </div>
           {(view === "overview" || view === "sessions") && <button className="primary-button" onClick={openCreate}>
             <Icon size={18}><path d="M12 5v14M5 12h14" /></Icon>
@@ -502,12 +729,43 @@ function App() {
             </div>
             <SessionTable sessions={sessions} loading={loading} onOperation={openOperation} />
           </section>
+        ) : view === "bookings" ? (
+          <BookingManagementView
+            sessions={sessions}
+            students={masterLookups.students}
+          />
+        ) : view === "analytics" ? (
+          <AnalyticsView
+            campuses={masterLookups.campuses}
+            courses={masterLookups.courses}
+            teachers={masterLookups.teachers}
+          />
+        ) : masterResources.includes(view as MasterResource) ? (
+          <MasterDataView
+            resource={view as MasterResource}
+            campuses={masterLookups.campuses}
+            guardians={masterLookups.guardians}
+            onChanged={async () => {
+              await loadMasterLookups();
+            }}
+          />
         ) : view === "notifications" ? (
           <NotificationsView
             notifications={notifications}
             loading={loading}
             onRead={readNotification}
             onRefresh={loadNotifications}
+          />
+        ) : view === "deliveries" ? (
+          <NotificationDeliveriesView
+            deliveries={deliveries}
+            loading={loading}
+            onRefresh={loadDeliveries}
+            onResend={async (deliveryId) => {
+              await resendNotificationDelivery(deliveryId);
+              notifySuccess("通知已加入补发队列");
+              await loadDeliveries();
+            }}
           />
         ) : (
           <AuditView logs={auditLogs} loading={loading} onRefresh={loadAuditLogs} />
@@ -527,7 +785,14 @@ function App() {
               {submitError && <ConflictAlert error={submitError} sessions={sessions} />}
               <div className="form-grid">
                 <Field label="课程"><Select value={form.course} options={courses} onChange={(value) => updateForm("course", value)} /></Field>
-                <Field label="校区"><Select value={form.campus} options={campuses} onChange={(value) => updateForm("campus", value)} /></Field>
+                <Field label="校区"><Select value={form.campus} options={campuses} onChange={(value) => {
+                  updateForm("campus", value);
+                  setForm((current) => ({
+                    ...current,
+                    campus: value,
+                    classroom: masterLookups.classrooms.find((item) => item.campusId === value)?.id ?? "",
+                  }));
+                }} /></Field>
                 <Field label="授课老师"><Select value={form.teacher} options={teachers} onChange={(value) => updateForm("teacher", value)} /></Field>
                 <Field label="教室"><Select value={form.classroom} options={classrooms} onChange={(value) => updateForm("classroom", value)} /></Field>
                 <Field label="上课日期"><input required type="date" value={form.date} onChange={(event) => updateForm("date", event.target.value)} /></Field>
@@ -539,6 +804,25 @@ function App() {
                 <Field label="开始时间"><input required type="time" value={form.startsAt} onChange={(event) => updateForm("startsAt", event.target.value)} /></Field>
                 <Field label="结束时间"><input required type="time" value={form.endsAt} onChange={(event) => updateForm("endsAt", event.target.value)} /></Field>
                 <Field label="课次容量" wide><div className="capacity-input"><input required min="1" step="1" type="number" value={form.capacity} onChange={(event) => updateForm("capacity", event.target.value)} /><span>人</span></div></Field>
+                <Field label="排课方式">
+                  <select value={form.repeatMode} onChange={(event) => updateForm("repeatMode", event.target.value as FormState["repeatMode"])}>
+                    <option value="ONCE">仅本次</option>
+                    <option value="WEEKLY">按周重复</option>
+                  </select>
+                </Field>
+                {form.repeatMode === "WEEKLY" && (
+                  <Field label="重复次数">
+                    <input required min="1" max="104" type="number" value={form.repeatCount} onChange={(event) => updateForm("repeatCount", event.target.value)} />
+                  </Field>
+                )}
+                {form.repeatMode === "WEEKLY" && (
+                  <Field label="冲突策略" wide>
+                    <label className="checkbox-field">
+                      <input type="checkbox" checked={form.skipConflicts} onChange={(event) => updateForm("skipConflicts", event.target.checked)} />
+                      跳过冲突日期并创建其余课次（默认整批失败）
+                    </label>
+                  </Field>
+                )}
               </div>
               <div className="form-note"><Icon size={17}><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></Icon>发布课次时，系统会自动检查老师和教室的时间冲突。</div>
               <div className="dialog-actions">
@@ -572,10 +856,18 @@ function App() {
                     <Field label="授课老师"><Select value={rescheduleForm.teacher} options={teachers} onChange={(teacher) => setRescheduleForm({ ...rescheduleForm, teacher })} /></Field>
                     <Field label="开始时间"><input required type="time" value={rescheduleForm.startsAt} onChange={(event) => setRescheduleForm({ ...rescheduleForm, startsAt: event.target.value })} /></Field>
                     <Field label="结束时间"><input required type="time" value={rescheduleForm.endsAt} onChange={(event) => setRescheduleForm({ ...rescheduleForm, endsAt: event.target.value })} /></Field>
-                    <Field label="教室" wide><Select value={rescheduleForm.classroom} options={classrooms} onChange={(classroom) => setRescheduleForm({ ...rescheduleForm, classroom })} /></Field>
+                    <Field label="教室" wide><Select value={rescheduleForm.classroom} options={masterLookups.classrooms.filter((item) => item.campusId === selectedSession.campusId)} onChange={(classroom) => setRescheduleForm({ ...rescheduleForm, classroom })} /></Field>
                   </div>
                   <div className="form-note">调课后系统会重新校验时间冲突，并向相关家长发送站内通知。</div>
                 </>
+              )}
+              {(operation === "reschedule" || operation === "cancel") && selectedSession.seriesId && (
+                <Field label="系列操作范围">
+                  <select value={operationScope} onChange={(event) => setOperationScope(event.target.value as typeof operationScope)}>
+                    <option value="THIS">仅本次</option>
+                    <option value="THIS_AND_FUTURE">本次及以后</option>
+                  </select>
+                </Field>
               )}
               {operation === "cancel" && (
                 <>
@@ -634,11 +926,14 @@ function ConflictAlert({ error, sessions }: { error: ApiError; sessions: CourseS
         <strong>{error.code === "SESSION_CONFLICT" ? "排课时间有冲突" : "无法创建课次"}</strong>
         <p>{error.message}</p>
         {conflicts.map((conflict) => {
-          const item = sessions.find((session) => session.id === conflict.sessionId);
-          return <p className="conflict-detail" key={conflict.sessionId}>
-            {conflict.teacherConflict && "老师冲突"}
-            {conflict.teacherConflict && conflict.classroomConflict && "、"}
-            {conflict.classroomConflict && "教室冲突"}
+          const firstConflict = conflict.conflicts?.[0];
+          const sessionId = conflict.sessionId ?? firstConflict?.sessionId;
+          const item = sessions.find((session) => session.id === sessionId);
+          return <p className="conflict-detail" key={`${conflict.date ?? ""}-${sessionId ?? ""}`}>
+            {conflict.date && `${conflict.date}：`}
+            {(conflict.teacherConflict ?? firstConflict?.teacherConflict) && "老师冲突"}
+            {(conflict.teacherConflict ?? firstConflict?.teacherConflict) && (conflict.classroomConflict ?? firstConflict?.classroomConflict) && "、"}
+            {(conflict.classroomConflict ?? firstConflict?.classroomConflict) && "教室冲突"}
             {item && `：${item.courseName}（${dateText(item.startsAt)} ${timeText(item.startsAt)}–${timeText(item.endsAt)}）`}
           </p>;
         })}
@@ -684,6 +979,56 @@ function NotificationsView({ notifications, loading, onRead, onRefresh }: { noti
         <span className="notice-icon">{item.type === "SESSION_CANCELLED" ? "停" : "调"}</span>
         <span className="notice-body"><span><b>{item.title}</b>{!item.readAt && <i>未读</i>}</span><p>{item.content}</p><small>{new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.createdAt))}</small></span>
       </button>)}</div>}
+  </section>;
+}
+
+const deliveryStatusLabel: Record<NotificationDelivery["status"], string> = {
+  PENDING: "待发送",
+  SENDING: "发送中",
+  SENT: "已发送",
+  FAILED: "发送失败",
+  SKIPPED: "已跳过",
+};
+
+function NotificationDeliveriesView({
+  deliveries,
+  loading,
+  onRefresh,
+  onResend,
+}: {
+  deliveries: NotificationDelivery[];
+  loading: boolean;
+  onRefresh: () => void;
+  onResend: (deliveryId: string) => Promise<void>;
+}) {
+  const [resendingId, setResendingId] = useState("");
+  const [error, setError] = useState("");
+  const resend = async (id: string) => {
+    setResendingId(id);
+    setError("");
+    try {
+      await onResend(id);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "补发失败");
+    } finally {
+      setResendingId("");
+    }
+  };
+  return <section>
+    <div className="intro-row"><p>查看微信订阅消息状态、失败原因并补发。</p><span>共 {deliveries.length} 条记录</span></div>
+    <div className="section-heading compact"><div><h2>投递记录</h2><p>发送失败不会回滚预约、取消或调课等业务操作</p></div><button className="secondary-button" onClick={onRefresh}>刷新</button></div>
+    {error && <div className="load-error" role="alert">{error}</div>}
+    {loading ? <div className="table-state">正在加载投递记录…</div> : deliveries.length === 0 ? <div className="table-state"><strong>暂无投递记录</strong></div> :
+      <div className="table-card"><table><thead><tr><th>通知 / 接收人</th><th>状态</th><th>尝试次数</th><th>失败原因</th><th>时间</th><th>操作</th></tr></thead><tbody>
+        {deliveries.map((item) => <tr key={item.id}>
+          <td><b>{item.notification.title}</b><small>{item.user.name} · {item.channel}</small></td>
+          <td><span className={`status delivery-${item.status.toLowerCase()}`}>{deliveryStatusLabel[item.status]}</span></td>
+          <td>{item.attemptCount}</td>
+          <td className="delivery-error">{item.lastError ?? "—"}</td>
+          <td><small>{new Intl.DateTimeFormat("zh-CN", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.sentAt ?? item.createdAt))}</small></td>
+          <td>{["FAILED", "SKIPPED"].includes(item.status) ? <button className="text-button" disabled={resendingId === item.id} onClick={() => void resend(item.id)}>{resendingId === item.id ? "提交中…" : "补发"}</button> : "—"}</td>
+        </tr>)}
+      </tbody></table></div>}
   </section>;
 }
 

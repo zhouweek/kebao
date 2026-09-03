@@ -20,3 +20,10 @@ export async function markNotificationRead(
   );
   return response.data;
 }
+
+export async function getSubscriptionConfig(): Promise<string[]> {
+  const response = await request<DataResponse<{ templateIds: string[] }>>(
+    "/notifications/subscription-config",
+  );
+  return response.data.templateIds;
+}

@@ -4,6 +4,7 @@ const taroMocks = vi.hoisted(() => ({
   request: vi.fn(),
   getStorageSync: vi.fn(),
   setStorageSync: vi.fn(),
+  removeStorageSync: vi.fn(),
 }));
 
 vi.mock("@tarojs/taro", () => ({
@@ -13,7 +14,9 @@ vi.mock("@tarojs/taro", () => ({
 import { ApiError, getErrorMessage, request } from "../src/api/client";
 import {
   getSavedBookings,
+  getAuth,
   markBookingCancelled,
+  saveAuth,
   saveBooking,
   saveIdentity,
   type SavedBooking,
@@ -40,7 +43,7 @@ describe("request", () => {
     taroMocks.request.mockReset();
   });
 
-  it("无请求体时不发送 JSON content-type", async () => {
+  it("默认不发送 JSON content-type 和开发身份头", async () => {
     taroMocks.request.mockResolvedValue({
       statusCode: 200,
       data: { data: ["ok"] },
@@ -56,12 +59,28 @@ describe("request", () => {
       expect.objectContaining({
         url: "http://localhost:3000/sessions",
         method: "GET",
-        header: {
-          "x-role": "GUARDIAN",
-          "x-tenant-id": "org-development",
-          "x-user-id": "student-1",
-          "x-request-id": "req-1",
-        },
+        header: { "x-request-id": "req-1" },
+      }),
+    );
+  });
+
+  it("存在访问令牌时发送 Bearer 请求头", async () => {
+    taroMocks.getStorageSync.mockImplementation((key: string) =>
+      key === "kebao.auth"
+        ? {
+            accessToken: "access-token",
+            refreshToken: "refresh-token",
+            accessTokenExpiresIn: 900,
+          }
+        : undefined,
+    );
+    taroMocks.request.mockResolvedValue({ statusCode: 200, data: { data: [] } });
+
+    await request("/sessions");
+
+    expect(taroMocks.request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        header: { Authorization: "Bearer access-token" },
       }),
     );
   });
@@ -129,6 +148,19 @@ describe("本地身份与预约状态", () => {
       "kebao.identity",
       identity,
     );
+  });
+
+  it("保存并读取登录令牌", () => {
+    const auth = {
+      accessToken: "access-token",
+      refreshToken: "refresh-token",
+      accessTokenExpiresIn: 900,
+    };
+    saveAuth(auth);
+    expect(taroMocks.setStorageSync).toHaveBeenCalledWith("kebao.auth", auth);
+
+    taroMocks.getStorageSync.mockReturnValue(auth);
+    expect(getAuth()).toEqual(auth);
   });
 
   it("保存预约时替换同 ID 旧记录并置顶", () => {

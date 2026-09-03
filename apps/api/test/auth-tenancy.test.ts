@@ -161,6 +161,193 @@ describe("开发身份中间件与授权", () => {
     expect(response.json().data).toHaveLength(1);
     expect(response.json().data[0].id).toBe("session-a");
   });
+
+  it("老师查询课表时服务端强制限定本人，忽略传入的其他老师", async () => {
+    const repository = new MemoryRepository({
+      organizations: ["org-a"],
+      users: [
+        { id: "teacher-a", organizationId: "org-a", role: "TEACHER" },
+        { id: "teacher-other", organizationId: "org-a", role: "TEACHER" },
+      ],
+      sessions: [
+        { ...session, organizationId: "org-a" },
+        {
+          ...session,
+          id: "session-other",
+          teacherId: "teacher-other",
+          teacherName: "李老师",
+          organizationId: "org-a",
+        },
+      ],
+    });
+    const app = buildApp(repository, { developmentIdentityEnabled: true });
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/sessions?teacherId=teacher-other",
+      headers: headers("org-a", "TEACHER", "teacher-a"),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.map((item: { id: string }) => item.id)).toEqual([
+      "session-a",
+    ]);
+  });
+});
+
+describe("老师排课基础资料", () => {
+  function createTeacherApp() {
+    const repository = new MemoryRepository({
+      organizations: ["org-a"],
+      users: [
+        {
+          id: "teacher-a",
+          organizationId: "org-a",
+          role: "TEACHER",
+          name: "王老师",
+        },
+      ],
+      masterData: {
+        courses: [
+          {
+            id: "course-active",
+            organizationId: "org-a",
+            name: "启用课程",
+            durationMinutes: 60,
+            isActive: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          {
+            id: "course-disabled",
+            organizationId: "org-a",
+            name: "停用课程",
+            durationMinutes: 60,
+            isActive: false,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
+        campuses: [
+          {
+            id: "campus-a",
+            organizationId: "org-a",
+            name: "A 校区",
+            isActive: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          {
+            id: "campus-b",
+            organizationId: "org-a",
+            name: "B 校区",
+            isActive: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
+        classrooms: [
+          {
+            id: "room-a",
+            organizationId: "org-a",
+            name: "A101",
+            campusId: "campus-a",
+            capacity: 12,
+            isActive: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
+      },
+    });
+    const app = buildApp(repository, { developmentIdentityEnabled: true });
+    apps.push(app);
+    return app;
+  }
+
+  it("options 仅返回启用的当前机构基础资料和当前老师", async () => {
+    const response = await createTeacherApp().inject({
+      method: "GET",
+      url: "/teacher/options",
+      headers: headers("org-a", "TEACHER", "teacher-a"),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.teacher).toEqual({ id: "teacher-a", name: "王老师" });
+    expect(response.json().data.courses.map((item: { id: string }) => item.id)).toEqual([
+      "course-active",
+    ]);
+    expect(response.json().data.classrooms[0]).toMatchObject({
+      id: "room-a",
+      campusId: "campus-a",
+    });
+  });
+
+  it("老师创建课次时使用服务端基础资料名称并校验教室归属", async () => {
+    const app = createTeacherApp();
+    const basePayload = {
+      courseId: "course-active",
+      courseName: "伪造课程名",
+      campusId: "campus-a",
+      campusName: "伪造校区名",
+      classroomId: "room-a",
+      classroomName: "伪造教室名",
+      teacherId: "teacher-a",
+      teacherName: "伪造老师名",
+      startsAt: "2026-09-04T02:00:00.000Z",
+      endsAt: "2026-09-04T03:00:00.000Z",
+      capacity: 10,
+    };
+    const created = await app.inject({
+      method: "POST",
+      url: "/sessions",
+      headers: { ...headers("org-a", "TEACHER", "teacher-a"), "content-type": "application/json" },
+      payload: basePayload,
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json().data).toMatchObject({
+      courseName: "启用课程",
+      campusName: "A 校区",
+      classroomName: "A101",
+      teacherName: "王老师",
+    });
+
+    const wrongCampus = await app.inject({
+      method: "POST",
+      url: "/sessions",
+      headers: { ...headers("org-a", "TEACHER", "teacher-a"), "content-type": "application/json" },
+      payload: {
+        ...basePayload,
+        campusId: "campus-b",
+        startsAt: "2026-09-05T02:00:00.000Z",
+        endsAt: "2026-09-05T03:00:00.000Z",
+      },
+    });
+    expect(wrongCampus.statusCode).toBe(400);
+    expect(wrongCampus.json().error.code).toBe("CLASSROOM_UNAVAILABLE");
+  });
+
+  it("老师创建课次时拒绝停用课程", async () => {
+    const response = await createTeacherApp().inject({
+      method: "POST",
+      url: "/sessions",
+      headers: { ...headers("org-a", "TEACHER", "teacher-a"), "content-type": "application/json" },
+      payload: {
+        courseId: "course-disabled",
+        courseName: "停用课程",
+        campusId: "campus-a",
+        campusName: "A 校区",
+        teacherId: "teacher-a",
+        teacherName: "王老师",
+        startsAt: "2026-09-04T02:00:00.000Z",
+        endsAt: "2026-09-04T03:00:00.000Z",
+        capacity: 10,
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe("COURSE_UNAVAILABLE");
+  });
 });
 
 describe("PrismaRepository.withSessionLock", () => {
@@ -189,6 +376,32 @@ describe("PrismaRepository.withSessionLock", () => {
     expect(transaction.$queryRaw).toHaveBeenCalledOnce();
     expect(transaction.organization.count).toHaveBeenCalledWith({
       where: { id: "org-a" },
+    });
+  });
+
+  it("withTransaction 让系列内所有写入复用同一事务客户端", async () => {
+    const transaction = {
+      scheduleSeries: { findFirst: vi.fn().mockResolvedValue(null) },
+    };
+    const prisma = {
+      scheduleSeries: {
+        findFirst: vi.fn(() => {
+          throw new Error("不应使用事务外客户端");
+        }),
+      },
+      $transaction: vi.fn(async (action: (client: typeof transaction) => Promise<unknown>) =>
+        action(transaction),
+      ),
+    } as unknown as PrismaClient;
+    const repository = new PrismaRepository(prisma);
+
+    const result = await repository.withTransaction(() =>
+      repository.getSeries("org-a", "series-a"),
+    );
+
+    expect(result).toBeUndefined();
+    expect(transaction.scheduleSeries.findFirst).toHaveBeenCalledWith({
+      where: { id: "series-a", organizationId: "org-a" },
     });
   });
 });
@@ -281,6 +494,121 @@ describe("课次运营 API", () => {
     expect(logs.json().data[0]).toMatchObject({
       actorId: "teacher-a",
       action: "ATTENDANCE_UPDATED",
+    });
+  });
+});
+
+describe("管理员预约 API", () => {
+  it("分页筛选预约并返回课程、学生和老师信息", async () => {
+    const app = createApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/admin/bookings?page=1&pageSize=1&sessionId=session-a&studentId=student-a&status=CONFIRMED&from=2026-09-02T00%3A00%3A00.000Z&to=2026-09-03T00%3A00%3A00.000Z",
+      headers: headers(),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toMatchObject({
+      page: 1,
+      pageSize: 1,
+      total: 1,
+      items: [
+        {
+          id: "booking-a",
+          session: {
+            id: "session-a",
+            courseId: "course-a",
+            courseName: "编程",
+            startsAt: "2026-09-02T10:00:00.000Z",
+          },
+          student: {
+            id: "student-a",
+            name: "学生甲",
+            guardianPhone: "138****0001",
+          },
+          teacher: { id: "teacher-a", name: "王老师" },
+        },
+      ],
+    });
+  });
+
+  it("仅管理员可查询和代操作预约", async () => {
+    const app = createApp();
+
+    const listed = await app.inject({
+      method: "GET",
+      url: "/admin/bookings",
+      headers: headers("org-a", "GUARDIAN", "guardian-a"),
+    });
+    const created = await app.inject({
+      method: "POST",
+      url: "/admin/bookings",
+      headers: {
+        ...headers("org-a", "GUARDIAN", "guardian-a"),
+        "content-type": "application/json",
+      },
+      payload: { sessionId: "session-a", studentId: "student-b" },
+    });
+
+    expect(listed.statusCode).toBe(403);
+    expect(created.statusCode).toBe(403);
+  });
+
+  it("管理员可在预约截止后代预约，并校验分页参数", async () => {
+    const app = createApp();
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/admin/bookings",
+      headers: { ...headers(), "content-type": "application/json" },
+      payload: { sessionId: "session-a", studentId: "student-b" },
+    });
+    const invalidPage = await app.inject({
+      method: "GET",
+      url: "/admin/bookings?page=0",
+      headers: headers(),
+    });
+
+    expect(created.statusCode).toBe(201);
+    expect(created.json().data.booking).toMatchObject({
+      sessionId: "session-a",
+      studentId: "student-b",
+      status: "CONFIRMED",
+    });
+    expect(invalidPage.statusCode).toBe(400);
+    expect(invalidPage.json().error.code).toBe("INVALID_PAGINATION");
+  });
+
+  it("代取消要求原因、越过家长截止时间并写入审计日志", async () => {
+    const app = createApp();
+    const missingReason = await app.inject({
+      method: "POST",
+      url: "/admin/bookings/booking-a/cancel",
+      headers: { ...headers(), "content-type": "application/json" },
+      payload: {},
+    });
+    expect(missingReason.statusCode).toBe(400);
+
+    const cancelled = await app.inject({
+      method: "POST",
+      url: "/admin/bookings/booking-a/cancel",
+      headers: { ...headers(), "content-type": "application/json" },
+      payload: { reason: "家长电话申请" },
+    });
+    expect(cancelled.statusCode).toBe(200);
+    expect(cancelled.json().data.status).toBe("CANCELLED");
+
+    const logs = await app.inject({
+      method: "GET",
+      url: "/audit-logs",
+      headers: headers(),
+    });
+    expect(logs.json().data[0]).toMatchObject({
+      actorId: "admin-a",
+      action: "ADMIN_BOOKING_CANCELLED",
+      entityId: "booking-a",
+      details: { reason: "家长电话申请" },
     });
   });
 });

@@ -3,9 +3,13 @@ import type {
   AttendanceStatus,
   Booking,
   CourseSession,
+  CreateSessionInput,
+  CreateSeriesInput,
   RescheduleSessionInput,
   RosterStudent,
   SessionStatus,
+  TeacherOptions,
+  SeriesResult,
 } from "./types";
 
 interface DataResponse<T> {
@@ -34,6 +38,37 @@ export async function listSessions(
   const response = await request<DataResponse<CourseSession[]>>(
     `/sessions${toQuery(filters)}`,
   );
+  return response.data;
+}
+
+export async function getTeacherOptions(): Promise<TeacherOptions> {
+  const response = await request<DataResponse<TeacherOptions>>("/teacher/options");
+  return response.data;
+}
+
+export async function createSession(
+  input: CreateSessionInput,
+): Promise<CourseSession> {
+  const response = await request<DataResponse<CourseSession>>("/sessions", {
+    method: "POST",
+    data: input,
+  });
+  return response.data;
+}
+
+export async function previewSeries(input: CreateSeriesInput): Promise<SeriesResult> {
+  const response = await request<DataResponse<SeriesResult>>("/session-series/preflight", {
+    method: "POST",
+    data: input,
+  });
+  return response.data;
+}
+
+export async function createSeries(input: CreateSeriesInput): Promise<SeriesResult> {
+  const response = await request<DataResponse<SeriesResult>>("/session-series", {
+    method: "POST",
+    data: input,
+  });
   return response.data;
 }
 
@@ -68,8 +103,8 @@ export async function getRoster(sessionId: string): Promise<RosterStudent[]> {
 export async function rescheduleSession(
   sessionId: string,
   input: RescheduleSessionInput,
-): Promise<CourseSession> {
-  const response = await request<DataResponse<CourseSession>>(
+): Promise<CourseSession | { sessions: CourseSession[] }> {
+  const response = await request<DataResponse<CourseSession | { sessions: CourseSession[] }>>(
     `/sessions/${encodeURIComponent(sessionId)}/reschedule`,
     { method: "PATCH", data: input },
   );

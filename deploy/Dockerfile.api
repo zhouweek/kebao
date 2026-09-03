@@ -1,0 +1,30 @@
+FROM public.ecr.aws/docker/library/node:22-alpine AS build
+WORKDIR /app
+RUN npm install --global pnpm@10.15.0
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/admin-web/package.json apps/admin-web/package.json
+COPY apps/miniapp/package.json apps/miniapp/package.json
+RUN pnpm install --frozen-lockfile
+COPY apps/api apps/api
+RUN pnpm --filter @kebao/api prisma:generate \
+  && pnpm --filter @kebao/api build
+
+FROM public.ecr.aws/docker/library/node:22-alpine AS runtime
+ENV NODE_ENV=production
+WORKDIR /app
+RUN apk add --no-cache tini \
+  && addgroup -S kebao \
+  && adduser -S -G kebao kebao
+COPY --from=build /app/package.json /app/pnpm-workspace.yaml ./
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/apps/api/node_modules ./apps/api/node_modules
+COPY --from=build /app/apps/api/package.json ./apps/api/package.json
+COPY --from=build /app/apps/api/dist ./apps/api/dist
+COPY --from=build /app/apps/api/prisma ./apps/api/prisma
+COPY deploy/api-entrypoint.sh /usr/local/bin/api-entrypoint
+RUN chmod 0555 /usr/local/bin/api-entrypoint \
+  && chown -R kebao:kebao /app
+USER kebao
+EXPOSE 3000
+ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/api-entrypoint"]
