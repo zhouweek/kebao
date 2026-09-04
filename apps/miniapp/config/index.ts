@@ -13,6 +13,14 @@ export default defineConfig({
   framework: "react",
   compiler: "webpack5",
   cache: { enable: false },
+  env: {
+    TARO_APP_API_BASE_URL: JSON.stringify(
+      process.env.TARO_APP_API_BASE_URL ?? "http://localhost:3000",
+    ),
+    TARO_APP_DEV_IDENTITY_ENABLED: JSON.stringify(
+      process.env.TARO_APP_DEV_IDENTITY_ENABLED ?? "false",
+    ),
+  },
   mini: {
     postcss: {
       pxtransform: { enable: true },

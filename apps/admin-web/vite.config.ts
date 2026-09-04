@@ -6,7 +6,10 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      "/auth": "http://localhost:3000",
+      "/admin": "http://localhost:3000",
       "/sessions": "http://localhost:3000",
+      "/session-series": "http://localhost:3000",
       "/bookings": "http://localhost:3000",
       "/teacher": "http://localhost:3000",
       "/notifications": "http://localhost:3000",
