@@ -72,6 +72,15 @@ button { cursor: pointer; }
   accent-color: var(--green);
 }
 .platform-login-hint { margin: -10px 0 0; color: var(--muted); font-size: 13px; }
+.platform-password-card { width: min(460px, calc(100vw - 40px)); }
+.platform-password-card .password-change-form { padding: 0; }
+.platform-password-card .form-grid { grid-template-columns: 1fr; gap: 16px; }
+.platform-password-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 22px;
+}
 
 .platform-shell { min-height: 100vh; background: var(--cream); }
 .platform-header {
@@ -398,7 +407,7 @@ td code { display: block; max-width: 280px; overflow: hidden; color: #72786f; fo
 
 @media (max-width: 1050px) {
   .metric-grid { grid-template-columns: repeat(2, 1fr); }
-  main { padding-left: 4vw; padding-right: 4vw; }
+  .app-shell > main { padding-left: 4vw; padding-right: 4vw; }
   .booking-filters { grid-template-columns: repeat(3, 1fr); }
   .analytics-filters { grid-template-columns: repeat(3, 1fr); }
   .analytics-metrics { grid-template-columns: repeat(3, 1fr); }
@@ -413,7 +422,7 @@ td code { display: block; max-width: 280px; overflow: hidden; color: #72786f; fo
   .nav-item { width: auto; padding: 9px; }
   .nav-item svg { display: none; }
   .sidebar-foot { display: none; }
-  main { margin-left: 0; padding: 0 18px 40px; }
+  .app-shell > main { margin-left: 0; padding: 0 18px 40px; }
   .topbar { height: 94px; margin-bottom: 24px; }
   h1 { font-size: 22px; }
   .metric-grid { grid-template-columns: 1fr 1fr; }

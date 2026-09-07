@@ -638,19 +638,19 @@ function PlatformForcePasswordChange({
 }) {
   return (
     <main className="login-page platform-login">
-      <section className="login-card">
+      <section className="login-card platform-password-card">
         <p className="eyebrow">账号安全</p>
         <h1>请先修改平台密码</h1>
         <p className="platform-login-hint">{name}，临时密码仅可用于首次登录。</p>
         <PasswordChangeForm
           onChanged={onChanged}
           actions={(submitting) => (
-            <>
+            <div className="platform-password-actions">
               <button className="primary-button" disabled={submitting} type="submit">
                 {submitting ? "正在修改…" : "修改密码"}
               </button>
               <button className="text-button" type="button" onClick={onLogout}>退出登录</button>
-            </>
+            </div>
           )}
         />
       </section>
@@ -711,7 +711,7 @@ function PasswordChangeForm({
     }
   };
   return (
-    <form onSubmit={(event) => void submit(event)}>
+    <form className="password-change-form" onSubmit={(event) => void submit(event)}>
       {error && <div className="load-error" role="alert">{error}</div>}
       <div className="form-grid">
         <Field label="当前密码"><input required minLength={8} type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></Field>
