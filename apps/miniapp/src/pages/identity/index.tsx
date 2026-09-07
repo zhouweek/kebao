@@ -10,6 +10,23 @@ const IDENTITIES: Identity[] = [
   { role: "teacher", id: "teacher-1", name: "王老师" },
 ];
 
+function phoneAuthorizationError(detail: {
+  errMsg?: string;
+  errno?: number;
+}): string {
+  if (detail.errno === 1400001) {
+    return "手机号验证额度不足，请在微信公众平台购买资源包后重试";
+  }
+  if (
+    detail.errMsg?.toLowerCase().includes("deny") ||
+    detail.errMsg?.toLowerCase().includes("cancel")
+  ) {
+    return "你已取消手机号授权，请重新点击并同意授权";
+  }
+  const errorCode = detail.errno === undefined ? "" : `，错误码 ${detail.errno}`;
+  return `微信未返回手机号授权码${errorCode}。请确认小程序为已认证的非个人主体，且手机号验证额度可用`;
+}
+
 export default function IdentityPage() {
   const [current, setCurrent] = useState<Identity | undefined>();
   const [organizationCode, setOrganizationCode] = useState("");
@@ -70,9 +87,18 @@ export default function IdentityPage() {
           disabled={submitting || organizationCode.trim().length === 0}
           openType="getPhoneNumber"
           onGetPhoneNumber={(event) => {
-            const phoneCode = event.detail.code;
+            const detail = event.detail as {
+              code?: string;
+              errMsg?: string;
+              errno?: number;
+            };
+            const phoneCode = detail.code;
             if (!phoneCode) {
-              setError("需要授权微信手机号才能登录");
+              console.error("微信手机号授权失败", {
+                errMsg: detail.errMsg,
+                errno: detail.errno,
+              });
+              setError(phoneAuthorizationError(detail));
               return;
             }
             void login(phoneCode);
