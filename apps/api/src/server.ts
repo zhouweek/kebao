@@ -40,8 +40,11 @@ const app = buildApp(repository, {
     ? {
         wechatIdentityResolver: (loginCode: string, phoneCode: string) =>
           wechatApi.resolveIdentity(loginCode, phoneCode),
+        wechatOpenIdResolver: (loginCode: string) =>
+          wechatApi.resolveOpenId(loginCode),
       }
     : {}),
+  wechatDemoPhoneLoginEnabled: config.wechatDemoPhoneLoginEnabled,
   notificationWorker,
   corsOrigins: config.corsOrigins,
   rateLimit: {

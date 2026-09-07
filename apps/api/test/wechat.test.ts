@@ -38,6 +38,9 @@ describe("WechatApi", () => {
       openId: "openid-login-a",
       phone: "13800000002",
     });
+    await expect(api.resolveOpenId("login-demo")).resolves.toBe(
+      "openid-login-demo",
+    );
     await api.resolveIdentity("login-b", "phone-b");
 
     expect(

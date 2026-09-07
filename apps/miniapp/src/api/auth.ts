@@ -24,6 +24,16 @@ interface DataResponse<T> {
   data: T;
 }
 
+function persistLogin(response: LoginResponse): LoginUser {
+  saveAuth(response);
+  saveIdentity({
+    id: response.user.id,
+    name: response.user.name,
+    role: response.user.role === "TEACHER" ? "teacher" : "parent",
+  });
+  return response.user;
+}
+
 export async function loginWithWechat(
   organizationCode: string,
   phoneCode: string,
@@ -33,13 +43,22 @@ export async function loginWithWechat(
     method: "POST",
     data: { organizationCode, loginCode, phoneCode },
   });
-  saveAuth(response.data);
-  saveIdentity({
-    id: response.data.user.id,
-    name: response.data.user.name,
-    role: response.data.user.role === "TEACHER" ? "teacher" : "parent",
-  });
-  return response.data.user;
+  return persistLogin(response.data);
+}
+
+export async function loginWithWechatDemo(
+  organizationCode: string,
+  phone: string,
+): Promise<LoginUser> {
+  const { code: loginCode } = await Taro.login();
+  const response = await request<DataResponse<LoginResponse>>(
+    "/auth/wechat/demo-login",
+    {
+      method: "POST",
+      data: { organizationCode, loginCode, phone },
+    },
+  );
+  return persistLogin(response.data);
 }
 
 export async function refreshAccessToken(): Promise<AuthState> {

@@ -1,7 +1,11 @@
 import { Button, Input, Text, View } from "@tarojs/components";
 import Taro, { useDidShow } from "@tarojs/taro";
 import { useState } from "react";
-import { loginWithWechat } from "../../api/auth";
+import {
+  loginWithWechat,
+  loginWithWechatDemo,
+  type LoginUser,
+} from "../../api/auth";
 import { getErrorMessage } from "../../api/client";
 import { getIdentity, saveIdentity, type Identity } from "../../store/session";
 
@@ -30,10 +34,13 @@ function phoneAuthorizationError(detail: {
 export default function IdentityPage() {
   const [current, setCurrent] = useState<Identity | undefined>();
   const [organizationCode, setOrganizationCode] = useState("");
+  const [phone, setPhone] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const developmentIdentityEnabled =
     process.env.TARO_APP_DEV_IDENTITY_ENABLED === "true";
+  const demoPhoneLoginEnabled =
+    process.env.TARO_APP_WECHAT_DEMO_PHONE_LOGIN_ENABLED === "true";
 
   useDidShow(() => setCurrent(getIdentity()));
 
@@ -45,11 +52,11 @@ export default function IdentityPage() {
     });
   };
 
-  const login = async (phoneCode: string) => {
+  const completeLogin = async (loginAction: () => Promise<LoginUser>) => {
     setSubmitting(true);
     setError("");
     try {
-      const user = await loginWithWechat(organizationCode.trim(), phoneCode);
+      const user = await loginAction();
       const identity: Identity = {
         id: user.id,
         name: user.name,
@@ -66,46 +73,96 @@ export default function IdentityPage() {
     }
   };
 
+  const login = (phoneCode: string) =>
+    completeLogin(() => loginWithWechat(organizationCode.trim(), phoneCode));
+
+  const loginDemo = () => {
+    if (!/^1\d{10}$/.test(phone.trim())) {
+      setError("请输入后台预留的 11 位手机号");
+      return;
+    }
+    void completeLogin(() =>
+      loginWithWechatDemo(organizationCode.trim(), phone.trim()),
+    );
+  };
+
   return (
     <View className="page">
       <View className="hero">
         <Text className="hero-title">你好，欢迎使用课宝</Text>
-        <Text className="hero-subtitle">使用微信授权手机号安全登录</Text>
+        <Text className="hero-subtitle">
+          {demoPhoneLoginEnabled
+            ? "输入后台预留手机号并绑定当前微信"
+            : "使用微信授权手机号安全登录"}
+        </Text>
       </View>
 
       <View className="card">
-        <Text className="title">机构编码</Text>
-        <Input
-          maxlength={64}
-          placeholder="请输入所在机构编码"
-          value={organizationCode}
-          onInput={(event) => setOrganizationCode(event.detail.value)}
-        />
+        <View className="form-field">
+          <Text className="title">机构编码</Text>
+          <Input
+            maxlength={64}
+            placeholder="请输入所在机构编码"
+            value={organizationCode}
+            onInput={(event) => setOrganizationCode(event.detail.value)}
+          />
+        </View>
+        {demoPhoneLoginEnabled ? (
+          <View className="form-field">
+            <Text className="title">手机号</Text>
+            <Input
+              maxlength={11}
+              type="number"
+              placeholder="请输入后台预留手机号"
+              value={phone}
+              onInput={(event) => setPhone(event.detail.value)}
+            />
+          </View>
+        ) : null}
         {error ? <Text className="muted">{error}</Text> : null}
-        <Button
-          className="primary"
-          disabled={submitting || organizationCode.trim().length === 0}
-          openType="getPhoneNumber"
-          onGetPhoneNumber={(event) => {
-            const detail = event.detail as {
-              code?: string;
-              errMsg?: string;
-              errno?: number;
-            };
-            const phoneCode = detail.code;
-            if (!phoneCode) {
-              console.error("微信手机号授权失败", {
-                errMsg: detail.errMsg,
-                errno: detail.errno,
-              });
-              setError(phoneAuthorizationError(detail));
-              return;
+        {demoPhoneLoginEnabled ? (
+          <Button
+            className="primary"
+            disabled={
+              submitting ||
+              organizationCode.trim().length === 0 ||
+              phone.trim().length === 0
             }
-            void login(phoneCode);
-          }}
-        >
-          {submitting ? "登录中…" : "微信登录"}
-        </Button>
+            onClick={loginDemo}
+          >
+            {submitting ? "绑定登录中…" : "绑定微信并登录"}
+          </Button>
+        ) : (
+          <Button
+            className="primary"
+            disabled={submitting || organizationCode.trim().length === 0}
+            openType="getPhoneNumber"
+            onGetPhoneNumber={(event) => {
+              const detail = event.detail as {
+                code?: string;
+                errMsg?: string;
+                errno?: number;
+              };
+              const phoneCode = detail.code;
+              if (!phoneCode) {
+                console.error("微信手机号授权失败", {
+                  errMsg: detail.errMsg,
+                  errno: detail.errno,
+                });
+                setError(phoneAuthorizationError(detail));
+                return;
+              }
+              void login(phoneCode);
+            }}
+          >
+            {submitting ? "登录中…" : "微信登录"}
+          </Button>
+        )}
+        {demoPhoneLoginEnabled ? (
+          <Text className="muted">
+            仅用于个人主体演示。手机号必须已由管理员在后台创建。
+          </Text>
+        ) : null}
       </View>
 
       {developmentIdentityEnabled ? (

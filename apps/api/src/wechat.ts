@@ -51,10 +51,14 @@ export class WechatApi implements WechatSubscriptionSender {
 
   async resolveIdentity(loginCode: string, phoneCode: string): Promise<WechatIdentity> {
     const [openId, phone] = await Promise.all([
-      this.code2Session(loginCode),
+      this.resolveOpenId(loginCode),
       this.getPhoneNumber(phoneCode),
     ]);
     return { openId, phone };
+  }
+
+  async resolveOpenId(loginCode: string): Promise<string> {
+    return this.code2Session(loginCode);
   }
 
   async send(

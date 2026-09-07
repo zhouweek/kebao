@@ -5,7 +5,13 @@ import { MemoryRepository } from "../src/memory-repository.js";
 
 const apps: ReturnType<typeof buildApp>[] = [];
 
-function createApp(options: { inactive?: boolean; openId?: string } = {}) {
+function createApp(
+  options: {
+    inactive?: boolean;
+    openId?: string;
+    demoPhoneLoginEnabled?: boolean;
+  } = {},
+) {
   const repository = new MemoryRepository({
     organizations: [
       { id: "org-a", code: "ORG-A" },
@@ -45,6 +51,10 @@ function createApp(options: { inactive?: boolean; openId?: string } = {}) {
       openId: `openid-${loginCode}`,
       phone: phoneCode === "phone-code" ? "13800000002" : "invalid",
     }),
+    wechatOpenIdResolver: async (loginCode) => `openid-${loginCode}`,
+    ...(options.demoPhoneLoginEnabled !== undefined
+      ? { wechatDemoPhoneLoginEnabled: options.demoPhoneLoginEnabled }
+      : {}),
   });
   apps.push(app);
   return app;
@@ -158,6 +168,42 @@ describe("管理员认证与 Bearer 会话", () => {
 });
 
 describe("微信登录", () => {
+  it("个人主体演示登录按预建手机号匹配并绑定微信身份", async () => {
+    const app = createApp({ demoPhoneLoginEnabled: true });
+    const response = await app.inject({
+      method: "POST",
+      url: "/auth/wechat/demo-login",
+      payload: {
+        organizationCode: "ORG-A",
+        loginCode: "demo-code",
+        phone: "13800000002",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.user).toMatchObject({
+      id: "guardian-1",
+      role: "GUARDIAN",
+      phone: "13800000002",
+    });
+  });
+
+  it("未启用时拒绝个人主体演示登录", async () => {
+    const app = createApp();
+    const response = await app.inject({
+      method: "POST",
+      url: "/auth/wechat/demo-login",
+      payload: {
+        organizationCode: "ORG-A",
+        loginCode: "demo-code",
+        phone: "13800000002",
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.code).toBe("WECHAT_DEMO_LOGIN_DISABLED");
+  });
+
   it("服务端换取 openid 和手机号后按机构匹配并绑定非管理员用户", async () => {
     const app = createApp();
     const response = await app.inject({

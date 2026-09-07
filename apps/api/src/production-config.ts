@@ -3,6 +3,7 @@ export interface RuntimeConfig {
   databaseUrl?: string;
   tokenSecret: string;
   developmentIdentityEnabled: boolean;
+  wechatDemoPhoneLoginEnabled: boolean;
   corsOrigins: string[];
   rateLimitMax: number;
   rateLimitWindowMs: number;
@@ -48,6 +49,8 @@ export function loadRuntimeConfig(
     nodeEnv,
     tokenSecret,
     developmentIdentityEnabled,
+    wechatDemoPhoneLoginEnabled:
+      env.WECHAT_DEMO_PHONE_LOGIN_ENABLED === "true",
     corsOrigins,
     rateLimitMax: positiveInteger(env.RATE_LIMIT_MAX, 300, "RATE_LIMIT_MAX"),
     rateLimitWindowMs: positiveInteger(

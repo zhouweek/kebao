@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const taroMocks = vi.hoisted(() => ({
+  login: vi.fn(),
   request: vi.fn(),
   getStorageSync: vi.fn(),
   setStorageSync: vi.fn(),
@@ -12,6 +13,7 @@ vi.mock("@tarojs/taro", () => ({
 }));
 
 import { ApiError, getErrorMessage, request } from "../src/api/client";
+import { loginWithWechatDemo } from "../src/api/auth";
 import {
   getSavedBookings,
   getAuth,
@@ -40,7 +42,10 @@ const savedBooking: SavedBooking = {
 
 describe("request", () => {
   beforeEach(() => {
+    taroMocks.login.mockReset();
     taroMocks.request.mockReset();
+    taroMocks.getStorageSync.mockReset();
+    taroMocks.setStorageSync.mockReset();
   });
 
   it("默认不发送 JSON content-type 和开发身份头", async () => {
@@ -125,6 +130,46 @@ describe("request", () => {
       statusCode: 409,
       details: { remaining: 0 },
     });
+  });
+
+  it("个人主体演示登录提交预建手机号并保存微信身份", async () => {
+    taroMocks.login.mockResolvedValue({ code: "wx-login-code" });
+    taroMocks.request.mockResolvedValue({
+      statusCode: 200,
+      data: {
+        data: {
+          accessToken: "access-token",
+          refreshToken: "refresh-token",
+          accessTokenExpiresIn: 900,
+          user: {
+            id: "teacher-1",
+            organizationId: "org-development",
+            role: "TEACHER",
+            name: "王老师",
+            phone: "18603328161",
+          },
+        },
+      },
+    });
+
+    await expect(
+      loginWithWechatDemo("DEMO", "18603328161"),
+    ).resolves.toMatchObject({ id: "teacher-1", role: "TEACHER" });
+    expect(taroMocks.request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "http://localhost:3000/auth/wechat/demo-login",
+        method: "POST",
+        data: {
+          organizationCode: "DEMO",
+          loginCode: "wx-login-code",
+          phone: "18603328161",
+        },
+      }),
+    );
+    expect(taroMocks.setStorageSync).toHaveBeenCalledWith(
+      "kebao.identity",
+      { id: "teacher-1", name: "王老师", role: "teacher" },
+    );
   });
 
   it("为未知错误提供中文兜底文案", () => {

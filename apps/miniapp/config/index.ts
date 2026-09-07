@@ -20,6 +20,9 @@ export default defineConfig({
     TARO_APP_DEV_IDENTITY_ENABLED: JSON.stringify(
       process.env.TARO_APP_DEV_IDENTITY_ENABLED ?? "false",
     ),
+    TARO_APP_WECHAT_DEMO_PHONE_LOGIN_ENABLED: JSON.stringify(
+      process.env.TARO_APP_WECHAT_DEMO_PHONE_LOGIN_ENABLED ?? "false",
+    ),
   },
   mini: {
     postcss: {

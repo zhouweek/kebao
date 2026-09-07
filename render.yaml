@@ -25,6 +25,8 @@ services:
         value: "true"
       - key: DEV_IDENTITY_ENABLED
         value: "false"
+      - key: WECHAT_DEMO_PHONE_LOGIN_ENABLED
+        value: "true"
       - key: CORS_ORIGINS
         value: https://kebao-admin.onrender.com
       - key: RATE_LIMIT_MAX

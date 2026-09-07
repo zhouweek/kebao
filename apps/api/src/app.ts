@@ -96,6 +96,8 @@ interface BuildAppOptions {
     loginCode: string,
     phoneCode: string,
   ) => Promise<{ openId: string; phone: string }>;
+  wechatOpenIdResolver?: (loginCode: string) => Promise<string>;
+  wechatDemoPhoneLoginEnabled?: boolean;
   accessTokenTtlSeconds?: number;
   refreshTokenTtlSeconds?: number;
   now?: () => Date;
@@ -341,6 +343,7 @@ export function buildApp(
       path === "/metrics" ||
       path === "/auth/admin/login" ||
       path === "/auth/wechat/login" ||
+      path === "/auth/wechat/demo-login" ||
       path === "/auth/refresh"
     ) {
       return;
@@ -409,6 +412,45 @@ export function buildApp(
         request.body.organizationCode.trim(),
         request.body.phone.trim(),
         request.body.password,
+      );
+      return { data: { ...result.tokens, user: publicUser(result.user) } };
+    },
+  );
+
+  app.post<{
+    Body: { organizationCode: string; loginCode: string; phone: string };
+  }>(
+    "/auth/wechat/demo-login",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["organizationCode", "loginCode", "phone"],
+          properties: {
+            organizationCode: { type: "string", minLength: 1, maxLength: 64 },
+            loginCode: { type: "string", minLength: 1, maxLength: 256 },
+            phone: { type: "string", minLength: 6, maxLength: 32 },
+          },
+          additionalProperties: false,
+        },
+      },
+    },
+    async (request) => {
+      if (!options.wechatDemoPhoneLoginEnabled) {
+        throw new DomainError(
+          "WECHAT_DEMO_LOGIN_DISABLED",
+          "个人主体演示登录未启用",
+          403,
+        );
+      }
+      if (!options.wechatOpenIdResolver) {
+        throw new DomainError("WECHAT_NOT_CONFIGURED", "微信登录尚未配置", 503);
+      }
+      const openId = await options.wechatOpenIdResolver(request.body.loginCode);
+      const result = await authService.loginWechat(
+        request.body.organizationCode.trim(),
+        request.body.phone.trim(),
+        openId,
       );
       return { data: { ...result.tokens, user: publicUser(result.user) } };
     },
