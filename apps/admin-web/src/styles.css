@@ -180,7 +180,7 @@ nav { display: grid; gap: 7px; }
 .more { border: 0; background: transparent; color: #7d857b; padding: 2px 0; font-size: 11px; }
 .more:hover { color: var(--green-dark); }
 
-main { margin-left: 232px; min-height: 100vh; padding: 0 6vw 60px; }
+.app-shell > main { margin-left: 232px; min-height: 100vh; padding: 0 6vw 60px; }
 .topbar {
   height: 118px; display: flex; align-items: center; justify-content: space-between;
   border-bottom: 1px solid var(--line); margin-bottom: 31px;

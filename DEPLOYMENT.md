@@ -35,9 +35,11 @@ chmod 600 .env.production
 - `AUTH_TOKEN_SECRET`：至少 32 位随机值。
 - `PLATFORM_AUTH_TOKEN_SECRET`：平台管理员令牌使用的独立随机值，至少 32 位且不得与
   `AUTH_TOKEN_SECRET` 相同。
-- `PLATFORM_ADMIN_USERNAME` / `PLATFORM_ADMIN_PASSWORD`：可选的首次启动平台管理员
-  凭据。设置密码后，API 启动时仅在账号不存在时创建账号且要求首次登录改密；已有账号
-  不会被覆盖。不需要初始化账号时将密码留空。
+- `PLATFORM_ADMIN_USERNAME` / `PLATFORM_ADMIN_PASSWORD` /
+  `PLATFORM_ADMIN_PASSWORD_VERSION`：可选的平台管理员初始化与安全找回配置。版本必须是
+  正整数，首次设为 `1`。账号不存在时创建并要求首次登录改密；账号已存在时，只有环境
+  版本大于数据库版本才会原子更新密码、要求改密并撤销全部平台会话。同版本重启不会覆盖
+  密码。不需要初始化或找回账号时将密码留空。
 - `METRICS_TOKEN`：至少 16 位随机值，监控采集时作为 Bearer Token。
 - `CORS_ORIGINS`：逗号分隔的管理后台 HTTPS 来源。
 - `TLS_CERT_DIR`：宿主机证书目录的绝对路径。
@@ -82,6 +84,10 @@ docker compose --env-file .env.production -f docker-compose.prod.yml logs api
 API entrypoint 每次启动先执行幂等的 `prisma migrate deploy`。迁移失败时 API
 不会启动，`web` 也会因 API 健康检查未通过而保持等待。应用启动前还会连接数据库并执行
 `SELECT 1`，避免进程在数据库不可用时误报成功。
+
+忘记平台超级管理员密码时，先将 `PLATFORM_ADMIN_PASSWORD` 改为新的临时强密码，再将
+`PLATFORM_ADMIN_PASSWORD_VERSION` 递增并重新部署。启动完成后，所有旧平台会话均已
+失效；使用临时密码登录并立即完成强制改密。不要只修改密码而复用旧版本号。
 
 发布前应先备份。涉及破坏性 schema 变更时采用“扩展 → 发布兼容代码 → 收缩”的两阶段
 迁移，不要依赖自动回滚数据库结构。

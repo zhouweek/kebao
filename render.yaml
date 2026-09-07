@@ -43,6 +43,8 @@ services:
         value: superadmin
       - key: PLATFORM_ADMIN_PASSWORD
         sync: false
+      - key: PLATFORM_ADMIN_PASSWORD_VERSION
+        value: "1"
       - key: WECHAT_APP_ID
         value: wxa727cb011da0dbc9
       - key: WECHAT_APP_SECRET

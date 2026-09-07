@@ -75,6 +75,7 @@ model PlatformAccount {
   username     String            @unique
   name         String
   passwordHash String
+  passwordVersion Int            @default(1)
   isActive     Boolean           @default(true)
   mustChangePassword Boolean      @default(true)
   lastLoginAt  DateTime?
