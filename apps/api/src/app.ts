@@ -1,3 +1,4 @@
+import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance } from "fastify";
 import { AnalyticsService, type AnalyticsFilter } from "./analytics.js";
 import { AuthService, type AuthUser } from "./auth.js";
@@ -105,6 +106,7 @@ interface BuildAppOptions {
   readinessCheck?: () => Promise<void>;
   logger?: boolean;
   trustProxy?: boolean;
+  adminWebRoot?: string;
 }
 
 function publicUser(user: AuthUser) {
@@ -165,6 +167,11 @@ export function buildApp(
     ? new FixedWindowRateLimiter(options.rateLimit.maximum, options.rateLimit.windowMs)
     : undefined;
   const corsOrigins = new Set(options.corsOrigins ?? []);
+  const isAdminWebRequest = (method: string, url: string) => {
+    if (!options.adminWebRoot || (method !== "GET" && method !== "HEAD")) return false;
+    const path = url.split("?")[0];
+    return path === "/" || path === "/index.html" || path?.startsWith("/assets/");
+  };
   const authService = new AuthService(repository, {
     tokenSecret: options.tokenSecret ?? "development-only-change-me",
     ...(options.accessTokenTtlSeconds === undefined
@@ -228,7 +235,12 @@ export function buildApp(
     reply.header("X-Frame-Options", "DENY");
     reply.header("Referrer-Policy", "no-referrer");
     reply.header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-    reply.header("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
+    reply.header(
+      "Content-Security-Policy",
+      isAdminWebRequest(request.method, request.url)
+        ? "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'"
+        : "default-src 'none'; frame-ancestors 'none'",
+    );
     reply.header("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
     const origin = request.headers.origin;
     if (origin && corsOrigins.has(origin)) {
@@ -323,6 +335,7 @@ export function buildApp(
   app.addHook("onRequest", async (request) => {
     const path = request.url.split("?")[0];
     if (
+      isAdminWebRequest(request.method, request.url) ||
       path === "/health" ||
       path === "/ready" ||
       path === "/metrics" ||
@@ -1116,6 +1129,21 @@ export function buildApp(
   );
 
   registerMasterDataRoutes(app, repository, authorize(["ADMIN"]));
+
+  if (options.adminWebRoot) {
+    void app.register(fastifyStatic, {
+      root: options.adminWebRoot,
+      wildcard: false,
+      index: ["index.html"],
+      setHeaders(response, filePath) {
+        if (filePath.endsWith("index.html")) {
+          response.setHeader("Cache-Control", "no-cache");
+        } else {
+          response.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        }
+      },
+    });
+  }
 
   return app;
 }

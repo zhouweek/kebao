@@ -22,6 +22,9 @@ API 默认监听 `http://localhost:3000`。小程序构建产物位于 `apps/min
 生产环境的 HTTPS、容器、迁移、健康检查、监控及 PostgreSQL 备份恢复流程见
 [DEPLOYMENT.md](./DEPLOYMENT.md)。
 
+使用 Render 托管管理后台、API 和 PostgreSQL 时，直接使用仓库根目录的
+`render.yaml` Blueprint，具体步骤见 [RENDER_DEPLOYMENT.md](./RENDER_DEPLOYMENT.md)。
+
 ## 使用 PostgreSQL
 
 当前项目根目录已有 `docker-compose.yml`，用于启动 PostgreSQL 16。

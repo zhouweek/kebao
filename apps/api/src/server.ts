@@ -56,6 +56,9 @@ const app = buildApp(repository, {
     : async () => undefined,
   logger: true,
   trustProxy: config.trustProxy,
+  ...(process.env.ADMIN_WEB_ROOT
+    ? { adminWebRoot: process.env.ADMIN_WEB_ROOT }
+    : {}),
 });
 const port = Number(process.env.PORT ?? 3000);
 const host = process.env.HOST ?? "0.0.0.0";

@@ -1,0 +1,66 @@
+services:
+  - type: web
+    name: kebao-admin
+    runtime: docker
+    region: singapore
+    plan: free
+    branch: main
+    dockerfilePath: ./deploy/Dockerfile.render
+    dockerContext: .
+    healthCheckPath: /ready
+    autoDeployTrigger: commit
+    initialDeployHook: cd /app/apps/api && ./node_modules/.bin/prisma db seed
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kebao-postgres
+          property: connectionString
+      - key: AUTH_TOKEN_SECRET
+        generateValue: true
+      - key: METRICS_TOKEN
+        generateValue: true
+      - key: TRUST_PROXY
+        value: "true"
+      - key: DEV_IDENTITY_ENABLED
+        value: "false"
+      - key: CORS_ORIGINS
+        value: https://kebao-admin.onrender.com
+      - key: RATE_LIMIT_MAX
+        value: "300"
+      - key: RATE_LIMIT_WINDOW_MS
+        value: "60000"
+      - key: NOTIFICATION_WORKER_INTERVAL_MS
+        value: "60000"
+      - key: SEED_ADMIN_PASSWORD
+        sync: false
+      - key: WECHAT_APP_ID
+        value: wxa727cb011da0dbc9
+      - key: WECHAT_APP_SECRET
+        sync: false
+      - key: WECHAT_TEMPLATE_BOOKING_CONFIRMED
+        value: ""
+      - key: WECHAT_TEMPLATE_BOOKING_CANCELLED
+        value: ""
+      - key: WECHAT_TEMPLATE_SESSION_RESCHEDULED
+        value: ""
+      - key: WECHAT_TEMPLATE_SESSION_CANCELLED
+        value: ""
+      - key: WECHAT_TEMPLATE_SESSION_REMINDER_24H
+        value: ""
+      - key: WECHAT_TEMPLATE_SESSION_REMINDER_2H
+        value: ""
+      - key: WECHAT_MINIPROGRAM_STATE
+        value: trial
+      - key: WECHAT_SUBSCRIBE_LANGUAGE
+        value: zh_CN
+
+databases:
+  - name: kebao-postgres
+    databaseName: kebao
+    user: kebao
+    region: singapore
+    plan: free
+    postgresMajorVersion: "16"
+    ipAllowList: []
