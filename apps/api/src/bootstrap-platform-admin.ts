@@ -17,7 +17,7 @@ export async function bootstrapPlatformAdmin(
   if (password.length < 8 || password.length > 128) {
     throw new Error("PLATFORM_ADMIN_PASSWORD 必须为 8 到 128 个字符");
   }
-  const configuredVersion = env.PLATFORM_ADMIN_PASSWORD_VERSION?.trim() ?? "";
+  const configuredVersion = env.PLATFORM_ADMIN_PASSWORD_VERSION?.trim() || "1";
   if (!/^[1-9]\d*$/.test(configuredVersion)) {
     throw new Error("PLATFORM_ADMIN_PASSWORD_VERSION 必须为正整数");
   }

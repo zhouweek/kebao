@@ -20,19 +20,17 @@ describe("bootstrapPlatformAdmin", () => {
     expect(prisma.platformAccount.upsert).not.toHaveBeenCalled();
   });
 
-  it("密码版本缺失或不是正整数时启动失败", async () => {
+  it("密码版本不是正整数时启动失败", async () => {
     const prisma = {
       platformAccount: { findUnique: vi.fn(), upsert: vi.fn() },
       $transaction: vi.fn(),
     };
 
-    for (const version of [undefined, "", "0", "-1", "1.5", "abc"]) {
+    for (const version of ["0", "-1", "1.5", "abc"]) {
       await expect(
         bootstrapPlatformAdmin(prisma as never, {
           PLATFORM_ADMIN_PASSWORD: "Initial123!",
-          ...(version === undefined
-            ? {}
-            : { PLATFORM_ADMIN_PASSWORD_VERSION: version }),
+          PLATFORM_ADMIN_PASSWORD_VERSION: version,
         }),
       ).rejects.toThrow(/PLATFORM_ADMIN_PASSWORD_VERSION/);
     }
@@ -123,7 +121,6 @@ describe("bootstrapPlatformAdmin", () => {
       bootstrapPlatformAdmin(prisma as never, {
         PLATFORM_ADMIN_USERNAME: "root",
         PLATFORM_ADMIN_PASSWORD: "Initial123!",
-        PLATFORM_ADMIN_PASSWORD_VERSION: "1",
       }),
     ).resolves.toBe("created");
 
