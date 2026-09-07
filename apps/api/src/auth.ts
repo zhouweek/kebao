@@ -18,6 +18,7 @@ export interface AuthUser extends UserIdentity {
   passwordHash: string | null;
   wechatOpenId: string | null;
   isActive: boolean;
+  mustChangePassword: boolean;
 }
 
 export interface AuthSession {
@@ -30,6 +31,7 @@ export interface AuthSession {
 }
 
 export interface AuthRepository {
+  withTransaction<T>(action: () => Promise<T>): Promise<T>;
   findAuthUserByOrganizationCodeAndPhone(
     organizationCode: string,
     phone: string,
@@ -40,8 +42,22 @@ export interface AuthRepository {
   createAuthSession(session: AuthSession): Promise<void>;
   getAuthSessionById(id: string): Promise<AuthSession | undefined>;
   getAuthSessionByRefreshTokenHash(hash: string): Promise<AuthSession | undefined>;
-  rotateAuthSession(id: string, refreshTokenHash: string, expiresAt: Date): Promise<void>;
+  rotateAuthSession(
+    id: string,
+    expectedHash: string,
+    refreshTokenHash: string,
+    expiresAt: Date,
+  ): Promise<boolean>;
   revokeAuthSession(id: string): Promise<void>;
+  revokeAllUserSessions(userId: string, organizationId: string): Promise<void>;
+  updateUserPassword(
+    userId: string,
+    organizationId: string,
+    expectedPasswordHash: string,
+    passwordHash: string,
+    mustChangePassword: boolean,
+  ): Promise<boolean>;
+  isOrganizationActive(organizationId: string): Promise<boolean>;
   touchUserLastLogin(userId: string, organizationId: string, at: Date): Promise<void>;
 }
 
@@ -57,6 +73,7 @@ interface AccessPayload {
   role: UserRole;
   sid: string;
   typ: "access";
+  aud: "tenant";
   iat: number;
   exp: number;
 }
@@ -88,6 +105,10 @@ export function hashPasswordForDevelopment(password: string): string {
   return `scrypt:${salt.toString("hex")}:${derived.toString("hex")}`;
 }
 
+export function generateTemporaryPassword(): string {
+  return `${randomBytes(12).toString("base64url")}Aa1!`;
+}
+
 export async function verifyPassword(password: string, encoded: string): Promise<boolean> {
   const [algorithm, saltHex, hashHex] = encoded.split(":");
   if (algorithm !== "scrypt" || !saltHex || !hashHex) return false;
@@ -115,15 +136,17 @@ export class AuthService {
     phone: string,
     password: string,
   ): Promise<{ user: AuthUser; tokens: TokenPair }> {
-    const user = await this.repository.findAuthUserByOrganizationCodeAndPhone(
-      organizationCode,
-      phone,
-      "ADMIN",
-    );
-    if (!user?.passwordHash || !(await verifyPassword(password, user.passwordHash))) {
-      throw new DomainError("INVALID_CREDENTIALS", "手机号或密码错误", 401);
-    }
-    return this.completeLogin(user);
+    return this.repository.withTransaction(async () => {
+      const user = await this.repository.findAuthUserByOrganizationCodeAndPhone(
+        organizationCode.trim().toUpperCase(),
+        phone,
+        "ADMIN",
+      );
+      if (!user?.passwordHash || !(await verifyPassword(password, user.passwordHash))) {
+        throw new DomainError("INVALID_CREDENTIALS", "手机号或密码错误", 401);
+      }
+      return this.completeLogin(user);
+    });
   }
 
   async loginWechat(
@@ -131,21 +154,23 @@ export class AuthService {
     phone: string,
     openId: string,
   ): Promise<{ user: AuthUser; tokens: TokenPair }> {
-    const user = await this.repository.findAuthUserByOrganizationCodeAndPhone(
-      organizationCode,
-      phone,
-    );
-    if (!user || user.role === "ADMIN") {
-      throw new DomainError("WECHAT_USER_NOT_FOUND", "手机号未匹配到可登录用户", 401);
-    }
-    if (user.wechatOpenId && user.wechatOpenId !== openId) {
-      throw new DomainError("WECHAT_IDENTITY_MISMATCH", "微信身份与手机号不匹配", 401);
-    }
-    if (!user.wechatOpenId) {
-      await this.repository.bindWechatOpenId(user.id, user.organizationId, openId);
-      user.wechatOpenId = openId;
-    }
-    return this.completeLogin(user);
+    return this.repository.withTransaction(async () => {
+      const user = await this.repository.findAuthUserByOrganizationCodeAndPhone(
+        organizationCode.trim().toUpperCase(),
+        phone,
+      );
+      if (!user || user.role === "ADMIN") {
+        throw new DomainError("WECHAT_USER_NOT_FOUND", "手机号未匹配到可登录用户", 401);
+      }
+      if (user.wechatOpenId && user.wechatOpenId !== openId) {
+        throw new DomainError("WECHAT_IDENTITY_MISMATCH", "微信身份与手机号不匹配", 401);
+      }
+      if (!user.wechatOpenId) {
+        await this.repository.bindWechatOpenId(user.id, user.organizationId, openId);
+        user.wechatOpenId = openId;
+      }
+      return this.completeLogin(user);
+    });
   }
 
   async authenticate(accessToken: string): Promise<AuthUser> {
@@ -159,6 +184,9 @@ export class AuthService {
     }
     if (!user || !user.isActive) {
       throw new DomainError("USER_DISABLED", "用户已停用", 403);
+    }
+    if (!(await this.repository.isOrganizationActive(user.organizationId))) {
+      throw new DomainError("TENANT_DISABLED", "机构已停用或删除", 403);
     }
     if (user.role !== payload.role) {
       throw new DomainError("TOKEN_INVALID", "访问令牌身份无效", 401);
@@ -176,12 +204,19 @@ export class AuthService {
     if (!user || !user.isActive) {
       throw new DomainError("USER_DISABLED", "用户已停用", 403);
     }
+    if (!(await this.repository.isOrganizationActive(user.organizationId))) {
+      throw new DomainError("TENANT_DISABLED", "机构已停用或删除", 403);
+    }
     const tokens = this.createTokenPair(user, session.id);
-    await this.repository.rotateAuthSession(
+    const rotated = await this.repository.rotateAuthSession(
       session.id,
+      hash,
       hashToken(tokens.refreshToken),
       new Date(this.now().getTime() + this.refreshTokenTtlSeconds * 1000),
     );
+    if (!rotated) {
+      throw new DomainError("REFRESH_TOKEN_INVALID", "刷新令牌无效或已过期", 401);
+    }
     return tokens;
   }
 
@@ -190,9 +225,46 @@ export class AuthService {
     await this.repository.revokeAuthSession(payload.sid);
   }
 
+  async changePassword(
+    user: AuthUser,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    await this.repository.withTransaction(async () => {
+      const current = await this.repository.getAuthUser(user.id, user.organizationId);
+      if (
+        !current?.passwordHash ||
+        !(await verifyPassword(currentPassword, current.passwordHash))
+      ) {
+        throw new DomainError("CURRENT_PASSWORD_INVALID", "当前密码错误", 400);
+      }
+      if (await verifyPassword(newPassword, current.passwordHash)) {
+        throw new DomainError(
+          "NEW_PASSWORD_MUST_DIFFER",
+          "新密码不能与当前密码相同",
+          400,
+        );
+      }
+      const updated = await this.repository.updateUserPassword(
+        user.id,
+        user.organizationId,
+        current.passwordHash,
+        await hashPassword(newPassword),
+        false,
+      );
+      if (!updated) {
+        throw new DomainError("CURRENT_PASSWORD_INVALID", "当前密码已变更，请重新登录", 400);
+      }
+      await this.repository.revokeAllUserSessions(user.id, user.organizationId);
+    });
+  }
+
   private async completeLogin(user: AuthUser): Promise<{ user: AuthUser; tokens: TokenPair }> {
     if (!user.isActive) {
       throw new DomainError("USER_DISABLED", "用户已停用", 403);
+    }
+    if (!(await this.repository.isOrganizationActive(user.organizationId))) {
+      throw new DomainError("TENANT_DISABLED", "机构已停用或删除", 403);
     }
     const sessionId = randomUUID();
     const tokens = this.createTokenPair(user, sessionId);
@@ -217,6 +289,7 @@ export class AuthService {
       role: user.role,
       sid: sessionId,
       typ: "access",
+      aud: "tenant",
       iat: nowSeconds,
       exp: nowSeconds + this.accessTokenTtlSeconds,
     };
@@ -248,6 +321,7 @@ export class AuthService {
       const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as AccessPayload;
       if (
         payload.typ !== "access" ||
+        payload.aud !== "tenant" ||
         !payload.sub ||
         !payload.org ||
         !payload.sid ||

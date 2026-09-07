@@ -72,6 +72,130 @@ beforeEach(() => {
 });
 
 describe("管理后台", () => {
+  it("机构管理员首次登录必须改密，成功后清除已撤销的会话", async () => {
+    const forcedUser = {
+      id: "admin-1",
+      organizationId: "org-development",
+      role: "ADMIN",
+      name: "管理员",
+      phone: "13800000001",
+      mustChangePassword: true,
+    };
+    localStorage.setItem(
+      "kebao.admin.auth",
+      JSON.stringify({
+        accessToken: "access-token",
+        refreshToken: "refresh-token",
+        accessTokenExpiresIn: 900,
+        user: forcedUser,
+      }),
+    );
+    localStorage.setItem(
+      "kebao.admin.login-credentials",
+      JSON.stringify({
+        organizationCode: "DEMO",
+        phone: "13800000001",
+        password: "Temp123!",
+      }),
+    );
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      if (input === "/auth/me") {
+        return new Response(JSON.stringify({ data: forcedUser }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (input === "/auth/change-password") {
+        return new Response(null, { status: 204 });
+      }
+      return new Response(JSON.stringify({ data: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetcher);
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "请先修改密码" })).toBeInTheDocument();
+    expect(localStorage.getItem("kebao.admin.login-credentials")).toBeNull();
+    fireEvent.change(screen.getByLabelText("当前密码"), { target: { value: "Temp123!" } });
+    fireEvent.change(screen.getByLabelText("新密码"), { target: { value: "NewPassword123!" } });
+    fireEvent.change(screen.getByLabelText("确认新密码"), { target: { value: "NewPassword123!" } });
+    fireEvent.click(screen.getByRole("button", { name: "修改密码" }));
+
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith(
+      "/auth/change-password",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          currentPassword: "Temp123!",
+          newPassword: "NewPassword123!",
+        }),
+      }),
+    ));
+    expect(await screen.findByRole("heading", { name: "管理员登录" })).toBeInTheDocument();
+    expect(localStorage.getItem("kebao.admin.auth")).toBeNull();
+  });
+
+  it("动态展示机构管理员身份并允许随时修改本人密码", async () => {
+    const currentUser = {
+      id: "admin-1",
+      organizationId: "org-development",
+      role: "ADMIN",
+      name: "周老师",
+      phone: "13800000001",
+      mustChangePassword: false,
+    };
+    localStorage.setItem(
+      "kebao.admin.login-credentials",
+      JSON.stringify({
+        organizationCode: "DEMO",
+        phone: "13800000001",
+        password: "OldPassword123!",
+      }),
+    );
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      if (input === "/auth/me") {
+        return new Response(JSON.stringify({ data: currentUser }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (input === "/auth/change-password") {
+        return new Response(null, { status: 204 });
+      }
+      return new Response(JSON.stringify({ data: [session] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetcher);
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "上午好，周老师" })).toBeInTheDocument();
+    expect(screen.getByText("机构管理员")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "修改本人密码" }));
+    fireEvent.change(screen.getByLabelText("当前密码"), { target: { value: "OldPassword123!" } });
+    fireEvent.change(screen.getByLabelText("新密码"), { target: { value: "NewPassword123!" } });
+    fireEvent.change(screen.getByLabelText("确认新密码"), { target: { value: "NewPassword123!" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith(
+      "/auth/change-password",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          currentPassword: "OldPassword123!",
+          newPassword: "NewPassword123!",
+        }),
+      }),
+    ));
+    expect(await screen.findByRole("heading", { name: "管理员登录" })).toBeInTheDocument();
+    expect(localStorage.getItem("kebao.admin.auth")).toBeNull();
+    expect(localStorage.getItem("kebao.admin.login-credentials")).toBeNull();
+    expect(screen.getByLabelText("密码")).toHaveValue("");
+  });
+
   it("支持显示密码并记住登录信息", async () => {
     localStorage.clear();
     const fetcher = vi.fn(async (input: RequestInfo | URL) =>

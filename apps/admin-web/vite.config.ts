@@ -6,6 +6,9 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      "/platform/auth": "http://localhost:3000",
+      "/platform/organizations": "http://localhost:3000",
+      "/platform/audit-logs": "http://localhost:3000",
       "/auth": "http://localhost:3000",
       "/admin": "http://localhost:3000",
       "/sessions": "http://localhost:3000",

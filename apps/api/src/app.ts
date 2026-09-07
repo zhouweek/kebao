@@ -1,4 +1,5 @@
 import fastifyStatic from "@fastify/static";
+import { randomUUID } from "node:crypto";
 import Fastify, { type FastifyInstance } from "fastify";
 import { AnalyticsService, type AnalyticsFilter } from "./analytics.js";
 import { AuthService, type AuthUser } from "./auth.js";
@@ -20,6 +21,7 @@ import {
 import { registerMasterDataRoutes } from "./master-data.js";
 import type { NotificationWorker } from "./notification-worker.js";
 import { HttpMetrics } from "./observability.js";
+import { registerPlatformRoutes } from "./platform-routes.js";
 import { FixedWindowRateLimiter, maskPhone, safeTokenEqual } from "./security.js";
 
 declare module "fastify" {
@@ -92,6 +94,7 @@ interface CreateSeriesBody extends CreateSessionBody {
 interface BuildAppOptions {
   developmentIdentityEnabled?: boolean;
   tokenSecret?: string;
+  platformTokenSecret?: string;
   wechatIdentityResolver?: (
     loginCode: string,
     phoneCode: string,
@@ -118,6 +121,7 @@ function publicUser(user: AuthUser) {
     role: user.role,
     name: user.name,
     phone: user.phone,
+    mustChangePassword: user.mustChangePassword,
   };
 }
 
@@ -172,7 +176,13 @@ export function buildApp(
   const isAdminWebRequest = (method: string, url: string) => {
     if (!options.adminWebRoot || (method !== "GET" && method !== "HEAD")) return false;
     const path = url.split("?")[0];
-    return path === "/" || path === "/index.html" || path?.startsWith("/assets/");
+    return (
+      path === "/" ||
+      path === "/index.html" ||
+      path === "/platform" ||
+      path === "/platform/" ||
+      path?.startsWith("/assets/")
+    );
   };
   const authService = new AuthService(repository, {
     tokenSecret: options.tokenSecret ?? "development-only-change-me",
@@ -337,6 +347,7 @@ export function buildApp(
   app.addHook("onRequest", async (request) => {
     const path = request.url.split("?")[0];
     if (
+      path?.startsWith("/platform/") ||
       isAdminWebRequest(request.method, request.url) ||
       path === "/health" ||
       path === "/ready" ||
@@ -356,6 +367,18 @@ export function buildApp(
         organizationId: user.organizationId,
         role: user.role,
       };
+      if (
+        user.mustChangePassword &&
+        path !== "/auth/change-password" &&
+        path !== "/auth/logout" &&
+        path !== "/auth/me"
+      ) {
+        throw new DomainError(
+          "PASSWORD_CHANGE_REQUIRED",
+          "首次登录或密码重置后必须修改密码",
+          403,
+        );
+      }
       return;
     }
     if (!options.developmentIdentityEnabled) {
@@ -378,7 +401,7 @@ export function buildApp(
     if (!["ADMIN", "TEACHER", "GUARDIAN"].includes(role)) {
       throw new DomainError("INVALID_ROLE", "x-role 不是有效角色", 401);
     }
-    if (!(await repository.organizationExists(tenantId))) {
+    if (!(await repository.isOrganizationActive(tenantId))) {
       throw new DomainError("TENANT_NOT_FOUND", "机构不存在", 401);
     }
     const identity = await repository.getUserIdentity(tenantId, userId);
@@ -407,13 +430,15 @@ export function buildApp(
         },
       },
     },
-    async (request) => {
+    async (request, reply) => {
       const result = await authService.loginAdmin(
         request.body.organizationCode.trim(),
         request.body.phone.trim(),
         request.body.password,
       );
-      return { data: { ...result.tokens, user: publicUser(result.user) } };
+      return reply
+        .header("Cache-Control", "no-store")
+        .send({ data: { ...result.tokens, user: publicUser(result.user) } });
     },
   );
 
@@ -435,7 +460,7 @@ export function buildApp(
         },
       },
     },
-    async (request) => {
+    async (request, reply) => {
       if (!options.wechatDemoPhoneLoginEnabled) {
         throw new DomainError(
           "WECHAT_DEMO_LOGIN_DISABLED",
@@ -452,7 +477,9 @@ export function buildApp(
         request.body.phone.trim(),
         openId,
       );
-      return { data: { ...result.tokens, user: publicUser(result.user) } };
+      return reply
+        .header("Cache-Control", "no-store")
+        .send({ data: { ...result.tokens, user: publicUser(result.user) } });
     },
   );
 
@@ -474,7 +501,7 @@ export function buildApp(
         },
       },
     },
-    async (request) => {
+    async (request, reply) => {
       if (!options.wechatIdentityResolver) {
         throw new DomainError("WECHAT_NOT_CONFIGURED", "微信登录尚未配置", 503);
       }
@@ -487,7 +514,9 @@ export function buildApp(
         identity.phone,
         identity.openId,
       );
-      return { data: { ...result.tokens, user: publicUser(result.user) } };
+      return reply
+        .header("Cache-Control", "no-store")
+        .send({ data: { ...result.tokens, user: publicUser(result.user) } });
     },
   );
 
@@ -503,9 +532,10 @@ export function buildApp(
         },
       },
     },
-    async (request) => ({
-      data: await authService.refresh(request.body.refreshToken),
-    }),
+    async (request, reply) =>
+      reply
+        .header("Cache-Control", "no-store")
+        .send({ data: await authService.refresh(request.body.refreshToken) }),
   );
 
   app.post("/auth/logout", async (request, reply) => {
@@ -513,6 +543,47 @@ export function buildApp(
     if (token) await authService.logout(token);
     return reply.status(204).send();
   });
+
+  app.post<{ Body: { currentPassword: string; newPassword: string } }>(
+    "/auth/change-password",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["currentPassword", "newPassword"],
+          properties: {
+            currentPassword: { type: "string", minLength: 8, maxLength: 128 },
+            newPassword: { type: "string", minLength: 8, maxLength: 128 },
+          },
+          additionalProperties: false,
+        },
+      },
+    },
+    async (request, reply) => {
+      const user = await repository.getAuthUser(
+        request.auth.id,
+        request.auth.organizationId,
+      );
+      if (!user) throw new DomainError("USER_DISABLED", "用户已停用", 403);
+      await repository.withTransaction(async () => {
+        await authService.changePassword(
+          user,
+          request.body.currentPassword,
+          request.body.newPassword,
+        );
+        await repository.saveAuditLog(request.auth.organizationId, {
+          id: randomUUID(),
+          actorId: request.auth.id,
+          action: "ADMIN_PASSWORD_CHANGED",
+          entityType: "User",
+          entityId: request.auth.id,
+          details: {},
+          createdAt: new Date(),
+        });
+      });
+      return reply.status(204).send();
+    },
+  );
 
   app.get("/auth/me", async (request) => {
     const user = await repository.getAuthUser(
@@ -1182,6 +1253,18 @@ export function buildApp(
   );
 
   registerMasterDataRoutes(app, repository, authorize(["ADMIN"]));
+  registerPlatformRoutes(app, repository, {
+    tokenSecret:
+      options.platformTokenSecret ??
+      `${options.tokenSecret ?? "development-only-change-me"}:platform`,
+    ...(options.accessTokenTtlSeconds === undefined
+      ? {}
+      : { accessTokenTtlSeconds: options.accessTokenTtlSeconds }),
+    ...(options.refreshTokenTtlSeconds === undefined
+      ? {}
+      : { refreshTokenTtlSeconds: options.refreshTokenTtlSeconds }),
+    ...(options.now ? { now: options.now } : {}),
+  });
 
   if (options.adminWebRoot) {
     void app.register(fastifyStatic, {
@@ -1196,6 +1279,16 @@ export function buildApp(
         }
       },
     });
+    app.get("/platform", async (_request, reply) =>
+      reply
+        .header("Cache-Control", "no-cache")
+        .sendFile("index.html", { cacheControl: false }),
+    );
+    app.get("/platform/", async (_request, reply) =>
+      reply
+        .header("Cache-Control", "no-cache")
+        .sendFile("index.html", { cacheControl: false }),
+    );
   }
 
   return app;

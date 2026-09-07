@@ -51,6 +51,9 @@ POSTGRES_IMAGE="postgres:16-alpine"
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/kebao?schema=public"
 POSTGRES_IMAGE="public.ecr.aws/docker/library/postgres:16-alpine"
 AUTH_TOKEN_SECRET="请替换为至少 32 位随机字符串"
+PLATFORM_AUTH_TOKEN_SECRET="另一个至少 32 位随机字符串"
+PLATFORM_ADMIN_USERNAME="superadmin"
+PLATFORM_ADMIN_PASSWORD="平台管理员首次登录临时密码"
 WECHAT_APP_ID="微信小程序 AppID"
 WECHAT_APP_SECRET="微信小程序 AppSecret"
 WECHAT_TEMPLATE_BOOKING_CONFIRMED="预约成功模板 ID"
@@ -99,6 +102,10 @@ DATABASE_URL="postgresql://postgres:postgres@localhost:5432/kebao" pnpm db:valid
 
 ## API
 
+管理后台入口为 `http://localhost:5173/`，平台超级管理员入口为
+`http://localhost:5173/platform`。首次运行 `pnpm db:seed` 时会创建缺失的平台管理员，
+但不会覆盖已有平台管理员或机构管理员的密码。平台管理员首次登录后必须修改临时密码。
+
 | 方法     | 路径                                    | 说明                                                  |
 | ------ | ------------------------------------- | --------------------------------------------------- |
 | GET    | `/health`                             | 存活检查，不访问数据库                                  |
@@ -109,6 +116,13 @@ DATABASE_URL="postgresql://postgres:postgres@localhost:5432/kebao" pnpm db:valid
 | POST   | `/auth/refresh`                       | 轮换刷新令牌并签发新的访问令牌                                  |
 | POST   | `/auth/logout`                        | 撤销当前会话                                              |
 | GET    | `/auth/me`                            | 获取当前用户；同时校验用户是否已停用                              |
+| POST   | `/auth/change-password`               | 机构管理员修改自己的密码；临时密码首次登录时必须调用                 |
+| POST   | `/platform/auth/login`                | 平台超级管理员登录，不需要机构编码                                 |
+| POST   | `/platform/auth/refresh`              | 轮换平台刷新令牌                                               |
+| POST   | `/platform/auth/change-password`      | 平台超级管理员修改密码                                          |
+| GET    | `/platform/organizations`             | 平台管理员查看机构                                             |
+| POST   | `/platform/organizations`             | 平台管理员创建机构                                             |
+| GET    | `/platform/audit-logs`                | 平台管理员查看平台操作审计日志                                    |
 | GET    | `/sessions`                           | 课次列表；支持 `from`、`to`、`teacherId`、`campusId`、`status` |
 | POST   | `/sessions`                           | 创建课次并校验老师、教室时间冲突                                    |
 | POST   | `/session-series/preflight`            | 预检按周排课系列，返回可创建日期和冲突日期                           |

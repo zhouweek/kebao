@@ -1,9 +1,101 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
-import { hashPasswordForDevelopment } from "../src/auth.js";
+import {
+  AuthService,
+  hashPasswordForDevelopment,
+  verifyPassword,
+} from "../src/auth.js";
 import { MemoryRepository } from "../src/memory-repository.js";
 
 const apps: ReturnType<typeof buildApp>[] = [];
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+class TenantLoginRaceRepository extends MemoryRepository {
+  readonly findStarted = deferred();
+  readonly releaseFind = deferred();
+  private transactionCalls = 0;
+
+  override async findAuthUserByOrganizationCodeAndPhone(
+    organizationCode: string,
+    phone: string,
+    role?: "ADMIN" | "TEACHER" | "GUARDIAN",
+  ) {
+    const user = await super.findAuthUserByOrganizationCodeAndPhone(
+      organizationCode,
+      phone,
+      role,
+    );
+    this.findStarted.resolve();
+    await this.releaseFind.promise;
+    return user;
+  }
+
+  override async withTransaction<T>(action: () => Promise<T>): Promise<T> {
+    this.transactionCalls += 1;
+    if (this.transactionCalls === 2) this.releaseFind.resolve();
+    return super.withTransaction(action);
+  }
+
+  override async resetPlatformTenantAdminPassword(
+    organizationId: string,
+    userId: string,
+    passwordHash: string,
+  ): Promise<void> {
+    await super.resetPlatformTenantAdminPassword(organizationId, userId, passwordHash);
+    this.releaseFind.resolve();
+  }
+}
+
+class WechatLoginRaceRepository extends MemoryRepository {
+  readonly firstFindStarted = deferred();
+  readonly releaseFirstFind = deferred();
+  private transactionCalls = 0;
+  private findCalls = 0;
+
+  override async findAuthUserByOrganizationCodeAndPhone(
+    organizationCode: string,
+    phone: string,
+    role?: "ADMIN" | "TEACHER" | "GUARDIAN",
+  ) {
+    const user = await super.findAuthUserByOrganizationCodeAndPhone(
+      organizationCode,
+      phone,
+      role,
+    );
+    this.findCalls += 1;
+    if (this.findCalls === 1) {
+      this.firstFindStarted.resolve();
+      await this.releaseFirstFind.promise;
+    }
+    return user;
+  }
+
+  override async withTransaction<T>(action: () => Promise<T>): Promise<T> {
+    this.transactionCalls += 1;
+    if (this.transactionCalls === 2) this.releaseFirstFind.resolve();
+    return super.withTransaction(action);
+  }
+}
+
+class RefreshRaceRepository extends MemoryRepository {
+  readonly bothLookupsStarted = deferred();
+  private lookupCalls = 0;
+
+  override async getAuthSessionByRefreshTokenHash(hash: string) {
+    const session = await super.getAuthSessionByRefreshTokenHash(hash);
+    this.lookupCalls += 1;
+    if (this.lookupCalls === 2) this.bothLookupsStarted.resolve();
+    await this.bothLookupsStarted.promise;
+    return session;
+  }
+}
 
 function createApp(
   options: {
@@ -165,6 +257,189 @@ describe("管理员认证与 Bearer 会话", () => {
     expect(me.statusCode).toBe(401);
     expect(me.json().error.code).toBe("SESSION_INVALID");
   });
+
+  it("[defect-probing] 服务层并发复用同一 refresh token 时仅一个成功", async () => {
+    const repository = new RefreshRaceRepository({
+      organizations: [{ id: "org-a", code: "ORG-A" }],
+      users: [
+        {
+          id: "admin-1",
+          organizationId: "org-a",
+          role: "ADMIN",
+          name: "管理员",
+          phone: "13800000001",
+          passwordHash: hashPasswordForDevelopment("Admin123!"),
+        },
+      ],
+    });
+    const service = new AuthService(repository, {
+      tokenSecret: "test-secret-that-is-long-enough",
+    });
+    const { tokens } = await service.loginAdmin("ORG-A", "13800000001", "Admin123!");
+
+    const results = await Promise.allSettled([
+      service.refresh(tokens.refreshToken),
+      service.refresh(tokens.refreshToken),
+    ]);
+
+    const fulfilled = results.filter(
+      (result): result is PromiseFulfilledResult<Awaited<ReturnType<AuthService["refresh"]>>> =>
+        result.status === "fulfilled",
+    );
+    const rejected = results.filter(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0]?.reason).toMatchObject({ code: "REFRESH_TOKEN_INVALID" });
+    await expect(service.authenticate(fulfilled[0]!.value.accessToken)).resolves.toMatchObject({
+      id: "admin-1",
+    });
+  });
+
+  it("[defect-probing] API 并发刷新失败响应不提供可用 access token", async () => {
+    const repository = new RefreshRaceRepository({
+      organizations: [{ id: "org-a", code: "ORG-A" }],
+      users: [
+        {
+          id: "admin-1",
+          organizationId: "org-a",
+          role: "ADMIN",
+          name: "管理员",
+          phone: "13800000001",
+          passwordHash: hashPasswordForDevelopment("Admin123!"),
+        },
+      ],
+    });
+    const app = buildApp(repository, {
+      tokenSecret: "test-secret-that-is-long-enough",
+    });
+    apps.push(app);
+    const login = await app.inject({
+      method: "POST",
+      url: "/auth/admin/login",
+      payload: {
+        organizationCode: "ORG-A",
+        phone: "13800000001",
+        password: "Admin123!",
+      },
+    });
+    const refreshToken = login.json().data.refreshToken as string;
+
+    const responses = await Promise.all([
+      app.inject({
+        method: "POST",
+        url: "/auth/refresh",
+        payload: { refreshToken },
+      }),
+      app.inject({
+        method: "POST",
+        url: "/auth/refresh",
+        payload: { refreshToken },
+      }),
+    ]);
+
+    expect(responses.map((response) => response.statusCode).sort()).toEqual([200, 401]);
+    const rejected = responses.find((response) => response.statusCode === 401)!;
+    expect(rejected.json().error.code).toBe("REFRESH_TOKEN_INVALID");
+    expect(rejected.json().data?.accessToken).toBeUndefined();
+    const unusable = await app.inject({
+      method: "GET",
+      url: "/auth/me",
+      headers: {
+        authorization: `Bearer ${rejected.json().data?.accessToken ?? "missing"}`,
+      },
+    });
+    expect(unusable.statusCode).toBe(401);
+  });
+
+  it("[defect-probing] 拒绝将租户管理员密码修改为当前密码", async () => {
+    const app = createApp();
+    const login = await app.inject({
+      method: "POST",
+      url: "/auth/admin/login",
+      payload: {
+        organizationCode: "ORG-A",
+        phone: "13800000001",
+        password: "Admin123!",
+      },
+    });
+
+    const changed = await app.inject({
+      method: "POST",
+      url: "/auth/change-password",
+      headers: { authorization: `Bearer ${login.json().data.accessToken}` },
+      payload: { currentPassword: "Admin123!", newPassword: "Admin123!" },
+    });
+
+    expect(changed.statusCode).toBe(400);
+    expect(changed.json().error.code).toBe("NEW_PASSWORD_MUST_DIFFER");
+  });
+
+  it("[defect-probing] 租户密码被并发重置后旧改密请求不得覆盖新密码", async () => {
+    const repository = new MemoryRepository({
+      organizations: [{ id: "org-a", code: "ORG-A" }],
+      users: [
+        {
+          id: "admin-1",
+          organizationId: "org-a",
+          role: "ADMIN",
+          name: "管理员",
+          phone: "13800000001",
+          passwordHash: hashPasswordForDevelopment("Admin123!"),
+        },
+      ],
+    });
+    const service = new AuthService(repository, {
+      tokenSecret: "test-secret-that-is-long-enough",
+    });
+    const staleUser = await repository.getAuthUser("admin-1", "org-a");
+    const resetPasswordHash = hashPasswordForDevelopment("Reset123!");
+    await repository.resetPlatformTenantAdminPassword(
+      "org-a",
+      "admin-1",
+      resetPasswordHash,
+    );
+
+    await expect(
+      service.changePassword(staleUser!, "Admin123!", "Changed123!"),
+    ).rejects.toMatchObject({ code: "CURRENT_PASSWORD_INVALID" });
+    const current = await repository.getAuthUser("admin-1", "org-a");
+    expect(await verifyPassword("Reset123!", current!.passwordHash!)).toBe(true);
+  });
+
+  it("[defect-probing] 租户旧密码登录与重置串行且不得补发有效会话", async () => {
+    const repository = new TenantLoginRaceRepository({
+      organizations: [{ id: "org-a", code: "ORG-A" }],
+      users: [
+        {
+          id: "admin-1",
+          organizationId: "org-a",
+          role: "ADMIN",
+          name: "管理员",
+          phone: "13800000001",
+          passwordHash: hashPasswordForDevelopment("Admin123!"),
+        },
+      ],
+    });
+    const service = new AuthService(repository, {
+      tokenSecret: "test-secret-that-is-long-enough",
+    });
+    const loginPromise = service.loginAdmin("ORG-A", "13800000001", "Admin123!");
+    await repository.findStarted.promise;
+    const resetPromise = repository.withTransaction(() =>
+      repository.resetPlatformTenantAdminPassword(
+        "org-a",
+        "admin-1",
+        hashPasswordForDevelopment("Reset123!"),
+      ),
+    );
+
+    const [{ tokens }] = await Promise.all([loginPromise, resetPromise]);
+    await expect(service.authenticate(tokens.accessToken)).rejects.toMatchObject({
+      code: "SESSION_INVALID",
+    });
+  });
 });
 
 describe("微信登录", () => {
@@ -238,6 +513,42 @@ describe("微信登录", () => {
 
     expect(response.statusCode).toBe(401);
     expect(response.json().error.code).toBe("WECHAT_IDENTITY_MISMATCH");
+  });
+
+  it("并发使用不同微信身份登录同一租户账号时仅首次绑定并创建会话", async () => {
+    const repository = new WechatLoginRaceRepository({
+      organizations: [{ id: "org-a", code: "ORG-A" }],
+      users: [
+        {
+          id: "guardian-1",
+          organizationId: "org-a",
+          role: "GUARDIAN",
+          name: "学生家长",
+          phone: "13800000002",
+        },
+      ],
+    });
+    const service = new AuthService(repository, {
+      tokenSecret: "test-secret-that-is-long-enough",
+    });
+
+    const firstLogin = service.loginWechat("ORG-A", "13800000002", "openid-first");
+    await repository.firstFindStarted.promise;
+    const secondLogin = service.loginWechat("ORG-A", "13800000002", "openid-second");
+    const results = await Promise.allSettled([firstLogin, secondLogin]);
+
+    expect(results[0].status).toBe("fulfilled");
+    expect(results[1]).toMatchObject({
+      status: "rejected",
+      reason: { code: "WECHAT_IDENTITY_MISMATCH" },
+    });
+    const user = await repository.getAuthUser("guardian-1", "org-a");
+    expect(user?.wechatOpenId).toBe("openid-first");
+    if (results[0].status === "fulfilled") {
+      await expect(
+        service.authenticate(results[0].value.tokens.accessToken),
+      ).resolves.toMatchObject({ id: "guardian-1" });
+    }
   });
 
   it("拒绝客户端手输手机号字段和错误机构编码", async () => {

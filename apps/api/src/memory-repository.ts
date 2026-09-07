@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import {
   DomainError,
   type AdminBookingFilter,
@@ -16,6 +17,14 @@ import {
 } from "./domain.js";
 import type { AuthSession, AuthUser } from "./auth.js";
 import type {
+  PlatformAccount,
+  PlatformAudit,
+  PlatformOrganization,
+  PlatformRepository,
+  PlatformSession,
+  PlatformTenantAdmin,
+} from "./platform.js";
+import type {
   MasterDataItem,
   MasterDataPage,
   MasterDataQuery,
@@ -28,9 +37,18 @@ export interface MemorySeed {
   organizations?: Array<string | { id: string; code: string }>;
   users?: Array<
     UserIdentity &
-      Partial<Pick<AuthUser, "name" | "phone" | "passwordHash" | "wechatOpenId" | "isActive">>
+      Partial<
+        Pick<
+          AuthUser,
+          "name" | "phone" | "passwordHash" | "wechatOpenId" | "isActive" | "mustChangePassword"
+        >
+      >
   >;
   authSessions?: AuthSession[];
+  platformAccounts?: Array<
+    Omit<PlatformAccount, "mustChangePassword"> &
+      Partial<Pick<PlatformAccount, "mustChangePassword">>
+  >;
   guardians?: Array<{ organizationId: string; guardianId: string; studentId: string }>;
   sessions?: Array<TenantItem<CourseSession>>;
   students?: Array<TenantItem<Student>>;
@@ -46,10 +64,15 @@ export interface MemorySeed {
  * 本仓储只用于本地开发和测试。
  * `withSessionLock` 将同一课次的预约串行化，模拟数据库事务中的行锁。
  */
-export class MemoryRepository implements Repository {
+export class MemoryRepository implements Repository, PlatformRepository {
   private readonly organizations = new Map<string, string>();
+  private readonly organizationRecords = new Map<string, PlatformOrganization>();
   private readonly users = new Map<string, AuthUser>();
   private readonly authSessions = new Map<string, AuthSession>();
+  private readonly platformAccounts = new Map<string, PlatformAccount>();
+  private readonly platformSessions = new Map<string, PlatformSession>();
+  private readonly platformAudits = new Map<string, PlatformAudit>();
+  private readonly tenantAdminEmails = new Map<string, string | null>();
   private readonly guardians = new Set<string>();
   private readonly sessions = new Map<string, TenantItem<CourseSession>>();
   private readonly students = new Map<string, TenantItem<Student>>();
@@ -60,16 +83,20 @@ export class MemoryRepository implements Repository {
   private readonly series = new Map<string, TenantItem<ScheduleSeries>>();
   private readonly masterData = new Map<string, TenantItem<MasterDataItem> & { resource: MasterResource }>();
   private readonly lockTails = new Map<string, Promise<void>>();
+  private readonly transactions = new AsyncLocalStorage<boolean>();
   private transactionTail: Promise<void> = Promise.resolve();
 
   constructor(seed: MemorySeed = {}) {
     this.organizations.set("org-development", "DEMO");
+    this.saveOrganization({ id: "org-development", code: "DEMO", name: "开发机构" });
     seed.organizations?.forEach((organization) => {
       const item =
         typeof organization === "string"
           ? { id: organization, code: organization }
           : organization;
-      this.organizations.set(item.id, item.code);
+      const code = item.code.trim().toUpperCase();
+      this.organizations.set(item.id, code);
+      this.saveOrganization({ id: item.id, code, name: item.code });
     });
     seed.users?.forEach((user) => {
       if (!this.organizations.has(user.organizationId)) {
@@ -84,11 +111,18 @@ export class MemoryRepository implements Repository {
           passwordHash: user.passwordHash ?? null,
           wechatOpenId: user.wechatOpenId ?? null,
           isActive: user.isActive ?? true,
+          mustChangePassword: user.mustChangePassword ?? false,
         }),
       );
     });
     seed.authSessions?.forEach((session) =>
       this.authSessions.set(session.id, structuredClone(session)),
+    );
+    seed.platformAccounts?.forEach((account) =>
+      this.platformAccounts.set(
+        account.id,
+        structuredClone({ ...account, mustChangePassword: account.mustChangePassword ?? false }),
+      ),
     );
     seed.guardians?.forEach((link) => {
       this.guardians.add(this.guardianKey(link.organizationId, link.guardianId, link.studentId));
@@ -152,11 +186,18 @@ export class MemoryRepository implements Repository {
   }
 
   async organizationExists(organizationId: string): Promise<boolean> {
-    return this.organizations.has(organizationId);
+    return this.organizationRecords.has(organizationId);
+  }
+
+  async isOrganizationActive(organizationId: string): Promise<boolean> {
+    const record = this.organizationRecords.get(organizationId);
+    return Boolean(record?.isActive && !record.deletedAt);
   }
 
   async listOrganizationIds(): Promise<string[]> {
-    return [...this.organizations.keys()];
+    return [...this.organizationRecords.values()]
+      .filter((item) => item.isActive && !item.deletedAt)
+      .map((item) => item.id);
   }
 
   async getUserIdentity(
@@ -234,16 +275,18 @@ export class MemoryRepository implements Repository {
 
   async rotateAuthSession(
     id: string,
+    expectedHash: string,
     refreshTokenHash: string,
     expiresAt: Date,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const session = this.authSessions.get(id);
-    if (!session) return;
+    if (!session || session.revokedAt || session.refreshTokenHash !== expectedHash) return false;
     this.authSessions.set(id, {
       ...session,
       refreshTokenHash,
       expiresAt,
     });
+    return true;
   }
 
   async revokeAuthSession(id: string): Promise<void> {
@@ -252,12 +295,293 @@ export class MemoryRepository implements Repository {
     this.authSessions.set(id, { ...session, revokedAt: new Date() });
   }
 
+  async revokeAllUserSessions(userId: string, organizationId: string): Promise<void> {
+    for (const [id, session] of this.authSessions) {
+      if (session.userId === userId && session.organizationId === organizationId) {
+        this.authSessions.set(id, { ...session, revokedAt: new Date() });
+      }
+    }
+  }
+
+  async updateUserPassword(
+    userId: string,
+    organizationId: string,
+    expectedPasswordHash: string,
+    passwordHash: string,
+    mustChangePassword: boolean,
+  ): Promise<boolean> {
+    const key = this.key(organizationId, userId);
+    const user = this.users.get(key);
+    if (!user || user.passwordHash !== expectedPasswordHash) return false;
+    this.users.set(key, { ...user, passwordHash, mustChangePassword });
+    return true;
+  }
+
   async touchUserLastLogin(
     _userId: string,
     _organizationId: string,
     _at: Date,
   ): Promise<void> {
     // 内存仓储不持久化展示字段，仅保持与数据库仓储一致的接口。
+  }
+
+  async findPlatformAccount(username: string): Promise<PlatformAccount | undefined> {
+    const account = [...this.platformAccounts.values()].find((item) => item.username === username);
+    return account ? structuredClone(account) : undefined;
+  }
+
+  async getPlatformAccount(id: string): Promise<PlatformAccount | undefined> {
+    return structuredClone(this.platformAccounts.get(id));
+  }
+
+  async createPlatformSession(session: PlatformSession): Promise<void> {
+    this.platformSessions.set(session.id, structuredClone(session));
+  }
+
+  async getPlatformSessionById(id: string): Promise<PlatformSession | undefined> {
+    return structuredClone(this.platformSessions.get(id));
+  }
+
+  async getPlatformSessionByRefreshTokenHash(hash: string): Promise<PlatformSession | undefined> {
+    const session = [...this.platformSessions.values()].find(
+      (item) => item.refreshTokenHash === hash,
+    );
+    return session ? structuredClone(session) : undefined;
+  }
+
+  async rotatePlatformSession(
+    id: string,
+    expectedHash: string,
+    refreshTokenHash: string,
+    expiresAt: Date,
+  ): Promise<boolean> {
+    const session = this.platformSessions.get(id);
+    if (!session || session.revokedAt || session.refreshTokenHash !== expectedHash) return false;
+    this.platformSessions.set(id, { ...session, refreshTokenHash, expiresAt });
+    return true;
+  }
+
+  async revokePlatformSession(id: string): Promise<void> {
+    const session = this.platformSessions.get(id);
+    if (session) this.platformSessions.set(id, { ...session, revokedAt: new Date() });
+  }
+
+  async revokeAllPlatformSessions(accountId: string): Promise<void> {
+    for (const [id, session] of this.platformSessions) {
+      if (session.accountId === accountId) {
+        this.platformSessions.set(id, { ...session, revokedAt: new Date() });
+      }
+    }
+  }
+
+  async touchPlatformLastLogin(_accountId: string, _at: Date): Promise<void> {}
+
+  async updatePlatformPassword(
+    accountId: string,
+    expectedPasswordHash: string,
+    passwordHash: string,
+    mustChangePassword: boolean,
+  ): Promise<boolean> {
+    const account = this.platformAccounts.get(accountId);
+    if (!account || account.passwordHash !== expectedPasswordHash) return false;
+    this.platformAccounts.set(accountId, {
+      ...account,
+      passwordHash,
+      mustChangePassword,
+    });
+    return true;
+  }
+
+  async listPlatformOrganizations(includeDeleted = false): Promise<PlatformOrganization[]> {
+    return [...this.organizationRecords.values()]
+      .filter((item) => includeDeleted || !item.deletedAt)
+      .map((item) => structuredClone(item));
+  }
+
+  async getPlatformOrganization(
+    id: string,
+    includeDeleted = false,
+  ): Promise<PlatformOrganization | undefined> {
+    const organization = this.organizationRecords.get(id);
+    if (!organization || (!includeDeleted && organization.deletedAt)) return undefined;
+    return structuredClone(organization);
+  }
+
+  async createPlatformOrganization(input: {
+    id: string;
+    code: string;
+    name: string;
+  }): Promise<PlatformOrganization> {
+    const normalized = { ...input, code: input.code.trim().toUpperCase() };
+    if ([...this.organizationRecords.values()].some((item) => item.code === normalized.code)) {
+      throw new DomainError("DUPLICATE_RESOURCE", "机构编码已存在", 409);
+    }
+    return this.saveOrganization(normalized);
+  }
+
+  async updatePlatformOrganization(
+    id: string,
+    input: { code?: string; name?: string },
+  ): Promise<PlatformOrganization> {
+    const current = this.requireOrganization(id);
+    const normalized = {
+      ...input,
+      ...(input.code === undefined ? {} : { code: input.code.trim().toUpperCase() }),
+    };
+    if (
+      normalized.code &&
+      [...this.organizationRecords.values()].some(
+        (item) => item.id !== id && item.code === normalized.code,
+      )
+    ) {
+      throw new DomainError("DUPLICATE_RESOURCE", "机构编码已存在", 409);
+    }
+    const updated = { ...current, ...normalized, updatedAt: new Date() };
+    this.organizationRecords.set(id, updated);
+    this.organizations.set(id, updated.code);
+    return structuredClone(updated);
+  }
+
+  async setPlatformOrganizationActive(
+    id: string,
+    isActive: boolean,
+  ): Promise<PlatformOrganization> {
+    const current = this.requireOrganization(id);
+    const updated = { ...current, isActive, updatedAt: new Date() };
+    this.organizationRecords.set(id, updated);
+    if (!isActive) {
+      for (const admin of this.users.values()) {
+        if (admin.organizationId === id) {
+          await this.revokeAllUserSessions(admin.id, id);
+        }
+      }
+    }
+    return structuredClone(updated);
+  }
+
+  async softDeletePlatformOrganization(id: string): Promise<void> {
+    const current = this.requireOrganization(id);
+    this.organizationRecords.set(id, {
+      ...current,
+      isActive: false,
+      deletedAt: new Date(),
+      updatedAt: new Date(),
+    });
+    for (const user of this.users.values()) {
+      if (user.organizationId === id) await this.revokeAllUserSessions(user.id, id);
+    }
+  }
+
+  async listPlatformTenantAdmins(organizationId: string): Promise<PlatformTenantAdmin[]> {
+    this.requireOrganization(organizationId);
+    return [...this.users.values()]
+      .filter((item) => item.organizationId === organizationId && item.role === "ADMIN")
+      .map((item) => this.toTenantAdmin(item));
+  }
+
+  async createPlatformTenantAdmin(input: {
+    id: string;
+    organizationId: string;
+    name: string;
+    phone: string;
+    email?: string | null;
+    passwordHash: string;
+  }): Promise<PlatformTenantAdmin> {
+    this.requireOrganization(input.organizationId);
+    if (
+      [...this.users.values()].some(
+        (item) => item.organizationId === input.organizationId && item.phone === input.phone,
+      )
+    ) {
+      throw new DomainError("DUPLICATE_RESOURCE", "机构内手机号已存在", 409);
+    }
+    const user: AuthUser = {
+      id: input.id,
+      organizationId: input.organizationId,
+      role: "ADMIN",
+      name: input.name,
+      phone: input.phone,
+      passwordHash: input.passwordHash,
+      wechatOpenId: null,
+      isActive: true,
+      mustChangePassword: true,
+    };
+    this.users.set(this.key(input.organizationId, input.id), user);
+    this.tenantAdminEmails.set(this.key(input.organizationId, input.id), input.email ?? null);
+    return this.toTenantAdmin(user);
+  }
+
+  async updatePlatformTenantAdmin(
+    organizationId: string,
+    userId: string,
+    input: { name?: string; phone?: string; email?: string | null },
+  ): Promise<PlatformTenantAdmin> {
+    const key = this.key(organizationId, userId);
+    const user = this.users.get(key);
+    if (!user || user.role !== "ADMIN") {
+      throw new DomainError("TENANT_ADMIN_NOT_FOUND", "机构管理员不存在", 404);
+    }
+    if (
+      input.phone &&
+      [...this.users.values()].some(
+        (item) =>
+          item.organizationId === organizationId &&
+          item.id !== userId &&
+          item.phone === input.phone,
+      )
+    ) {
+      throw new DomainError("DUPLICATE_RESOURCE", "机构内手机号已存在", 409);
+    }
+    const updated = { ...user, ...input };
+    delete updated.email;
+    this.users.set(key, updated);
+    if (input.email !== undefined) this.tenantAdminEmails.set(key, input.email);
+    return this.toTenantAdmin(updated);
+  }
+
+  async setPlatformTenantAdminActive(
+    organizationId: string,
+    userId: string,
+    isActive: boolean,
+  ): Promise<PlatformTenantAdmin> {
+    const key = this.key(organizationId, userId);
+    const user = this.users.get(key);
+    if (!user || user.role !== "ADMIN") {
+      throw new DomainError("TENANT_ADMIN_NOT_FOUND", "机构管理员不存在", 404);
+    }
+    const updated = { ...user, isActive };
+    this.users.set(key, updated);
+    if (!isActive) await this.revokeAllUserSessions(userId, organizationId);
+    return this.toTenantAdmin(updated);
+  }
+
+  async resetPlatformTenantAdminPassword(
+    organizationId: string,
+    userId: string,
+    passwordHash: string,
+  ): Promise<void> {
+    const key = this.key(organizationId, userId);
+    const user = this.users.get(key);
+    if (!user || user.role !== "ADMIN") {
+      throw new DomainError("TENANT_ADMIN_NOT_FOUND", "机构管理员不存在", 404);
+    }
+    this.users.set(key, { ...user, passwordHash, mustChangePassword: true });
+    await this.revokeAllUserSessions(userId, organizationId);
+  }
+
+  async revokeTenantUserSessions(organizationId: string, userId: string): Promise<void> {
+    await this.revokeAllUserSessions(userId, organizationId);
+  }
+
+  async savePlatformAudit(log: PlatformAudit): Promise<void> {
+    this.platformAudits.set(log.id, structuredClone(log));
+  }
+
+  async listPlatformAudits(limit: number): Promise<PlatformAudit[]> {
+    return [...this.platformAudits.values()]
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, limit)
+      .map((item) => structuredClone(item));
   }
 
   async isGuardianOfStudent(
@@ -797,6 +1121,7 @@ export class MemoryRepository implements Repository {
   }
 
   async withTransaction<T>(action: () => Promise<T>): Promise<T> {
+    if (this.transactions.getStore()) return action();
     const previous = this.transactionTail;
     let release!: () => void;
     this.transactionTail = new Promise<void>((resolve) => {
@@ -804,22 +1129,44 @@ export class MemoryRepository implements Repository {
     });
     await previous;
     const snapshots = {
+      organizations: structuredClone(this.organizations),
+      organizationRecords: structuredClone(this.organizationRecords),
+      users: structuredClone(this.users),
+      authSessions: structuredClone(this.authSessions),
+      platformAccounts: structuredClone(this.platformAccounts),
+      platformSessions: structuredClone(this.platformSessions),
+      platformAudits: structuredClone(this.platformAudits),
+      tenantAdminEmails: structuredClone(this.tenantAdminEmails),
+      guardians: structuredClone(this.guardians),
       sessions: structuredClone(this.sessions),
+      students: structuredClone(this.students),
       series: structuredClone(this.series),
       bookings: structuredClone(this.bookings),
       notifications: structuredClone(this.notifications),
       notificationDeliveries: structuredClone(this.notificationDeliveries),
       auditLogs: structuredClone(this.auditLogs),
+      masterData: structuredClone(this.masterData),
     };
     try {
-      return await action();
+      return await this.transactions.run(true, action);
     } catch (error) {
+      this.restoreMap(this.organizations, snapshots.organizations);
+      this.restoreMap(this.organizationRecords, snapshots.organizationRecords);
+      this.restoreMap(this.users, snapshots.users);
+      this.restoreMap(this.authSessions, snapshots.authSessions);
+      this.restoreMap(this.platformAccounts, snapshots.platformAccounts);
+      this.restoreMap(this.platformSessions, snapshots.platformSessions);
+      this.restoreMap(this.platformAudits, snapshots.platformAudits);
+      this.restoreMap(this.tenantAdminEmails, snapshots.tenantAdminEmails);
+      this.restoreSet(this.guardians, snapshots.guardians);
       this.restoreMap(this.sessions, snapshots.sessions);
+      this.restoreMap(this.students, snapshots.students);
       this.restoreMap(this.series, snapshots.series);
       this.restoreMap(this.bookings, snapshots.bookings);
       this.restoreMap(this.notifications, snapshots.notifications);
       this.restoreMap(this.notificationDeliveries, snapshots.notificationDeliveries);
       this.restoreMap(this.auditLogs, snapshots.auditLogs);
+      this.restoreMap(this.masterData, snapshots.masterData);
       throw error;
     } finally {
       release();
@@ -929,6 +1276,7 @@ export class MemoryRepository implements Repository {
         passwordHash: current?.passwordHash ?? null,
         wechatOpenId: current?.wechatOpenId ?? null,
         isActive: item.isActive,
+        mustChangePassword: current?.mustChangePassword ?? false,
       });
     } else if (resource === "students") {
       this.students.set(this.key(organizationId, item.id), {
@@ -953,5 +1301,52 @@ export class MemoryRepository implements Repository {
   private restoreMap<K, V>(target: Map<K, V>, snapshot: Map<K, V>): void {
     target.clear();
     snapshot.forEach((value, key) => target.set(key, value));
+  }
+
+  private restoreSet<T>(target: Set<T>, snapshot: Set<T>): void {
+    target.clear();
+    snapshot.forEach((value) => target.add(value));
+  }
+
+  private saveOrganization(input: {
+    id: string;
+    code: string;
+    name: string;
+  }): PlatformOrganization {
+    const now = new Date();
+    const organization: PlatformOrganization = {
+      ...input,
+      isActive: true,
+      deletedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.organizationRecords.set(input.id, organization);
+    this.organizations.set(input.id, input.code);
+    return structuredClone(organization);
+  }
+
+  private requireOrganization(id: string): PlatformOrganization {
+    const organization = this.organizationRecords.get(id);
+    if (!organization || organization.deletedAt) {
+      throw new DomainError("ORGANIZATION_NOT_FOUND", "机构不存在或已删除", 404);
+    }
+    return organization;
+  }
+
+  private toTenantAdmin(user: AuthUser): PlatformTenantAdmin {
+    const now = new Date();
+    return {
+      id: user.id,
+      organizationId: user.organizationId,
+      name: user.name,
+      phone: user.phone,
+      email: this.tenantAdminEmails.get(this.key(user.organizationId, user.id)) ?? null,
+      isActive: user.isActive,
+      mustChangePassword: user.mustChangePassword,
+      lastLoginAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
   }
 }

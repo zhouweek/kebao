@@ -297,6 +297,7 @@ export interface AuthUser {
   role: "ADMIN" | "TEACHER" | "GUARDIAN";
   name: string;
   phone: string | null;
+  mustChangePassword?: boolean;
 }
 
 export interface AuthTokens {
@@ -323,6 +324,10 @@ function storedAuth(): LoginResult | undefined {
   } catch {
     return undefined;
   }
+}
+
+export function getStoredAuth(): LoginResult | undefined {
+  return storedAuth();
 }
 
 export function saveAuth(result: LoginResult): void {
@@ -366,6 +371,7 @@ export class ApiError extends Error {
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {
+  if (response.status === 204) return undefined as T;
   const body = (await response.json()) as { data?: T } & ApiErrorPayload;
   if (!response.ok) {
     throw new ApiError(
@@ -463,6 +469,19 @@ export async function getMe(fetcher: typeof fetch = fetch): Promise<AuthUser> {
     headers: { Accept: "application/json", ...authHeaders() },
   }, fetcher);
   return parseResponse<AuthUser>(response);
+}
+
+export async function changeAdminPassword(
+  currentPassword: string,
+  newPassword: string,
+  fetcher: typeof fetch = fetch,
+): Promise<void> {
+  await parseResponse<void>(await authenticatedFetch("/auth/change-password", {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify({ currentPassword, newPassword }),
+  }, fetcher));
+  clearAuth();
 }
 
 export async function getSessions(

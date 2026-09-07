@@ -2,6 +2,7 @@ export interface RuntimeConfig {
   nodeEnv: "development" | "test" | "production";
   databaseUrl?: string;
   tokenSecret: string;
+  platformTokenSecret: string;
   developmentIdentityEnabled: boolean;
   wechatDemoPhoneLoginEnabled: boolean;
   corsOrigins: string[];
@@ -42,12 +43,15 @@ export function loadRuntimeConfig(
       : "development";
   const databaseUrl = env.DATABASE_URL?.trim() || undefined;
   const tokenSecret = env.AUTH_TOKEN_SECRET ?? "development-only-change-me";
+  const platformTokenSecret =
+    env.PLATFORM_AUTH_TOKEN_SECRET ?? `${tokenSecret}:platform`;
   const developmentIdentityEnabled = env.DEV_IDENTITY_ENABLED === "true";
   const corsOrigins = parseOrigins(env.CORS_ORIGINS);
   const metricsToken = env.METRICS_TOKEN?.trim() || undefined;
   const config: RuntimeConfig = {
     nodeEnv,
     tokenSecret,
+    platformTokenSecret,
     developmentIdentityEnabled,
     wechatDemoPhoneLoginEnabled:
       env.WECHAT_DEMO_PHONE_LOGIN_ENABLED === "true",
@@ -72,6 +76,16 @@ export function loadRuntimeConfig(
       tokenSecret.includes("replace-with")
     ) {
       errors.push("AUTH_TOKEN_SECRET 必须是至少 32 位的非示例随机值");
+    }
+    if (
+      !env.PLATFORM_AUTH_TOKEN_SECRET ||
+      platformTokenSecret !== platformTokenSecret.trim() ||
+      platformTokenSecret.trim().length < 32 ||
+      platformTokenSecret.trim().includes("change-me") ||
+      platformTokenSecret.trim().includes("replace-with") ||
+      platformTokenSecret.trim() === tokenSecret.trim()
+    ) {
+      errors.push("PLATFORM_AUTH_TOKEN_SECRET 必须是独立的至少 32 位随机值");
     }
     if (developmentIdentityEnabled) {
       errors.push("生产环境禁止启用 DEV_IDENTITY_ENABLED");

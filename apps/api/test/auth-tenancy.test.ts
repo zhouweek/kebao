@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildApp } from "../src/app.js";
 import type { CourseSession } from "../src/domain.js";
@@ -417,6 +417,61 @@ describe("PrismaRepository.withSessionLock", () => {
     expect(transaction.scheduleSeries.findFirst).toHaveBeenCalledWith({
       where: { id: "series-a", organizationId: "org-a" },
     });
+  });
+
+  it("withTransaction 遇到 P2034 时有界重试且嵌套调用复用当前事务", async () => {
+    const transaction = {
+      scheduleSeries: { findFirst: vi.fn().mockResolvedValue(null) },
+    };
+    const conflict = () =>
+      new Prisma.PrismaClientKnownRequestError("transaction write conflict", {
+        code: "P2034",
+        clientVersion: "test",
+      });
+    let attempts = 0;
+    const prisma = {
+      $transaction: vi.fn(
+        async (action: (client: typeof transaction) => Promise<unknown>) => {
+          attempts += 1;
+          const result = await action(transaction);
+          if (attempts < 3) throw conflict();
+          return result;
+        },
+      ),
+    } as unknown as PrismaClient;
+    const repository = new PrismaRepository(prisma);
+
+    const result = await repository.withTransaction(() =>
+      repository.withTransaction(() => repository.getSeries("org-a", "series-a")),
+    );
+
+    expect(result).toBeUndefined();
+    expect(prisma.$transaction).toHaveBeenCalledTimes(3);
+    expect(transaction.scheduleSeries.findFirst).toHaveBeenCalledTimes(3);
+  });
+
+  it("withTransaction 在 P2034 达到重试上限后抛出原错误", async () => {
+    const conflict = () =>
+      new Prisma.PrismaClientKnownRequestError("transaction write conflict", {
+        code: "P2034",
+        clientVersion: "test",
+      });
+    const action = vi.fn().mockResolvedValue(undefined);
+    const prisma = {
+      $transaction: vi.fn(
+        async (transactionAction: (client: object) => Promise<unknown>) => {
+          await transactionAction({});
+          throw conflict();
+        },
+      ),
+    } as unknown as PrismaClient;
+    const repository = new PrismaRepository(prisma);
+
+    await expect(repository.withTransaction(action)).rejects.toMatchObject({
+      code: "P2034",
+    });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(3);
+    expect(action).toHaveBeenCalledTimes(3);
   });
 });
 

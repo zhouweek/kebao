@@ -36,6 +36,7 @@ const notificationWorker = new NotificationWorker(
 const app = buildApp(repository, {
   developmentIdentityEnabled,
   tokenSecret: config.tokenSecret,
+  platformTokenSecret: config.platformTokenSecret,
   ...(wechatApi
     ? {
         wechatIdentityResolver: (loginCode: string, phoneCode: string) =>

@@ -7,9 +7,7 @@ const tomorrow = new Date();
 tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
 tomorrow.setUTCHours(10, 0, 0, 0);
 const endsAt = new Date(tomorrow.getTime() + 90 * 60 * 1000);
-const adminPasswordHash = await hashPassword(
-  process.env.SEED_ADMIN_PASSWORD ?? "Admin123!",
-);
+const adminPasswordHash = await hashPassword(process.env.SEED_ADMIN_PASSWORD ?? "Admin123!");
 
 await prisma.organization.upsert({
   where: { id: organizationId },
@@ -23,7 +21,7 @@ await prisma.campus.upsert({
 });
 await prisma.user.upsert({
   where: { id: "admin-1" },
-  update: { phone: "13800000001", passwordHash: adminPasswordHash, isActive: true },
+  update: { phone: "13800000001" },
   create: {
     id: "admin-1",
     organizationId,
@@ -33,6 +31,7 @@ await prisma.user.upsert({
     passwordHash: adminPasswordHash,
   },
 });
+
 await prisma.user.upsert({
   where: { id: "teacher-1" },
   update: { phone: "13800000002", isActive: true },

@@ -19,6 +19,8 @@ services:
           property: connectionString
       - key: AUTH_TOKEN_SECRET
         generateValue: true
+      - key: PLATFORM_AUTH_TOKEN_SECRET
+        generateValue: true
       - key: METRICS_TOKEN
         generateValue: true
       - key: TRUST_PROXY
@@ -36,6 +38,10 @@ services:
       - key: NOTIFICATION_WORKER_INTERVAL_MS
         value: "60000"
       - key: SEED_ADMIN_PASSWORD
+        sync: false
+      - key: PLATFORM_ADMIN_USERNAME
+        value: superadmin
+      - key: PLATFORM_ADMIN_PASSWORD
         sync: false
       - key: WECHAT_APP_ID
         value: wxa727cb011da0dbc9

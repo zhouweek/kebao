@@ -27,14 +27,14 @@ try {
         organizationId: organization.id,
         role: "ADMIN",
         phone: "13800000001",
+        passwordHash: null,
       },
       data: {
         passwordHash: await hashPassword(password),
-        isActive: true,
       },
     });
     if (result.count === 0) {
-      console.info("初始管理员账号尚未初始化，跳过密码同步");
+      console.info("初始管理员不存在或已有密码，跳过密码初始化");
     } else {
       const admin = await prisma.user.findFirst({
         where: {
@@ -50,7 +50,7 @@ try {
       ) {
         throw new Error("初始管理员密码同步校验失败");
       }
-      console.info("初始管理员密码已与 SEED_ADMIN_PASSWORD 同步");
+      console.info("初始管理员尚无密码，已完成一次性密码初始化");
     }
   }
 } finally {

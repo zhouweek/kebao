@@ -29,12 +29,14 @@ PostgreSQL 数据库。管理后台与 API 使用同一 HTTPS 域名，不需要
 Blueprint 创建时需要填写以下 Secret：
 
 - `SEED_ADMIN_PASSWORD`：初始管理员密码，至少 8 位，不要继续使用演示密码。
+- `PLATFORM_ADMIN_PASSWORD`：首个平台超级管理员的临时密码，至少 8 位。
 - `WECHAT_APP_SECRET`：微信小程序 AppSecret。
 
 以下值由 Render 自动生成或注入，无需手动填写：
 
 - `DATABASE_URL`
 - `AUTH_TOKEN_SECRET`
+- `PLATFORM_AUTH_TOKEN_SECRET`
 - `METRICS_TOKEN`
 
 首次部署会按顺序执行：
@@ -42,7 +44,9 @@ Blueprint 创建时需要填写以下 Secret：
 1. 构建 API 和管理后台。
 2. 执行 `prisma migrate deploy`。
 3. 启动 Web Service。
-4. 执行一次 `prisma db seed`，创建 `DEMO` 机构和初始管理员。
+4. 执行一次 `prisma db seed`，创建 `DEMO` 机构、初始机构管理员和平台超级管理员。
+
+种子脚本只在账号不存在时写入密码。后续重新部署不会覆盖管理员已修改的密码。
 
 ## 部署后检查
 
@@ -58,16 +62,26 @@ https://kebao-admin.onrender.com
 https://kebao-admin.onrender.com/health
 https://kebao-admin.onrender.com/ready
 https://kebao-admin.onrender.com/
+https://kebao-admin.onrender.com/platform
 ```
 
 `/health` 应返回 `status: ok`，`/ready` 应返回 `status: ready`，根路径应显示
-管理后台登录页。
+机构后台登录页，`/platform` 应显示超级管理员登录页。
 
 初始登录信息：
 
 - 机构编码：`DEMO`
 - 手机号：`13800000001`
 - 密码：创建 Blueprint 时填写的 `SEED_ADMIN_PASSWORD`
+
+平台超级管理员登录信息：
+
+- 地址：`https://kebao-admin.onrender.com/platform`
+- 账号：`superadmin`
+- 密码：创建 Blueprint 时填写的 `PLATFORM_ADMIN_PASSWORD`
+
+平台超级管理员首次登录后必须修改临时密码。后续可在平台页面创建机构、创建机构管理员、
+停用机构、重置机构管理员密码和撤销管理员登录会话。
 
 如果 Render 因名称冲突生成了不同的服务域名，请在服务的 Environment 页面把
 `CORS_ORIGINS` 改成实际 HTTPS 地址，然后重新部署。

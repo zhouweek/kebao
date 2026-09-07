@@ -51,6 +51,8 @@ model Organization {
   id         String          @id @default(cuid())
   code       String          @unique
   name       String
+  isActive   Boolean         @default(true)
+  deletedAt  DateTime?
   campuses   Campus[]
   users      User[]
   students   Student[]
@@ -66,6 +68,47 @@ model Organization {
   authSessions  AuthSession[]
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
+}
+
+model PlatformAccount {
+  id           String            @id @default(cuid())
+  username     String            @unique
+  name         String
+  passwordHash String
+  isActive     Boolean           @default(true)
+  mustChangePassword Boolean      @default(true)
+  lastLoginAt  DateTime?
+  sessions     PlatformSession[]
+  auditLogs    PlatformAuditLog[]
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+}
+
+model PlatformSession {
+  id               String          @id @default(cuid())
+  accountId        String
+  account          PlatformAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  refreshTokenHash String          @unique
+  expiresAt        DateTime        @db.Timestamptz(3)
+  revokedAt        DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([accountId, expiresAt])
+}
+
+model PlatformAuditLog {
+  id         String          @id @default(cuid())
+  actorId    String
+  actor      PlatformAccount @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  action     String
+  entityType String
+  entityId   String
+  details    Json
+  createdAt  DateTime        @default(now())
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
 }
 
 model ScheduleSeries {
@@ -116,6 +159,7 @@ model User {
   passwordHash    String?
   wechatOpenId    String?
   isActive        Boolean           @default(true)
+  mustChangePassword Boolean         @default(false)
   lastLoginAt     DateTime?
   teacherSessions CourseSession[] @relation("SessionTeacher")
   guardianLinks   StudentGuardian[]

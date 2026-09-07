@@ -13,6 +13,8 @@ import {
   MasterDataItem,
   MasterResource,
   cancelSession,
+  changeAdminPassword,
+  clearAuth,
   createSession,
   createSeries,
   previewSeries,
@@ -22,6 +24,8 @@ import {
   getRoster,
   getSessions,
   getMasterData,
+  getMe,
+  getStoredAuth,
   hasAuth,
   isDevelopmentIdentityEnabled,
   loginAdmin,
@@ -210,6 +214,7 @@ function App() {
   const [authenticated, setAuthenticated] = useState(
     () => hasAuth() || isDevelopmentIdentityEnabled(),
   );
+  const [authUser, setAuthUser] = useState(() => getStoredAuth()?.user);
   const [loginOrganizationCode, setLoginOrganizationCode] = useState(
     rememberedLogin?.organizationCode ?? "",
   );
@@ -226,6 +231,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [form, setForm] = useState<FormState>(initialForm);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<ApiError | null>(null);
@@ -256,6 +262,12 @@ function App() {
   const classrooms = masterLookups.classrooms.filter(
     (item) => !form.campus || item.campusId === form.campus,
   );
+
+  const clearRememberedLogin = () => {
+    localStorage.removeItem(LOGIN_CREDENTIALS_STORAGE_KEY);
+    setRememberLogin(false);
+    setLoginPassword("");
+  };
 
   const loadMasterLookups = async () => {
     const resources: MasterResource[] = [
@@ -289,7 +301,25 @@ function App() {
   };
 
   useEffect(() => {
-    if (authenticated) void loadSessions();
+    if (!authenticated) return;
+    if (isDevelopmentIdentityEnabled() && !hasAuth()) {
+      void loadSessions();
+      return;
+    }
+    void getMe()
+      .then((current) => {
+        setAuthUser(current);
+        if (current.mustChangePassword) {
+          clearRememberedLogin();
+        } else {
+          void loadSessions();
+        }
+      })
+      .catch((error) => {
+        clearAuth();
+        setAuthenticated(false);
+        setLoginError(error instanceof Error ? error.message : "登录已失效，请重新登录");
+      });
   }, [authenticated]);
 
   const submitLogin = async (event: FormEvent) => {
@@ -297,12 +327,15 @@ function App() {
     setLoginSubmitting(true);
     setLoginError("");
     try {
-      await loginAdmin(
+      const result = await loginAdmin(
         loginOrganizationCode.trim(),
         loginPhone.trim(),
         loginPassword,
       );
-      if (rememberLogin) {
+      setAuthUser(result.user);
+      if (result.user.mustChangePassword) {
+        clearRememberedLogin();
+      } else if (rememberLogin) {
         localStorage.setItem(
           LOGIN_CREDENTIALS_STORAGE_KEY,
           JSON.stringify({
@@ -659,6 +692,21 @@ function App() {
     );
   }
 
+  if (authUser?.mustChangePassword) {
+    return <AdminForcePasswordChange
+      name={authUser.name}
+      onChanged={() => {
+        setAuthUser(undefined);
+        setAuthenticated(false);
+      }}
+      onLogout={() => {
+        clearAuth();
+        setAuthUser(undefined);
+        setAuthenticated(false);
+      }}
+    />;
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -741,15 +789,24 @@ function App() {
           </button>
         </nav>
         <div className="sidebar-foot">
-          <span className="avatar">林</span>
-          <span><b>林校长</b><small>超级管理员</small></span>
-          <button
-            className="more"
-            aria-label="退出登录"
-            onClick={() => void logout().finally(() => setAuthenticated(false))}
-          >
-            退出
-          </button>
+          <span className="avatar">{authUser?.name?.slice(-1) ?? "管"}</span>
+          <span><b>{authUser?.name ?? "管理员"}</b><small>机构管理员</small></span>
+          <div className="account-actions">
+            <button
+              className="more"
+              aria-label="修改本人密码"
+              onClick={() => setPasswordDialogOpen(true)}
+            >
+              改密
+            </button>
+            <button
+              className="more"
+              aria-label="退出登录"
+              onClick={() => void logout().finally(() => setAuthenticated(false))}
+            >
+              退出
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -757,7 +814,7 @@ function App() {
         <header className="topbar">
           <div>
             <p className="eyebrow">教学运营中心</p>
-            <h1>{view === "overview" ? "上午好，林校长" : view === "sessions" ? "课次管理" : view === "bookings" ? "预约管理" : view === "analytics" ? "经营统计" : view === "notifications" ? "站内通知" : view === "deliveries" ? "通知投递" : view === "audit" ? "审计日志" : masterLabels[view]}</h1>
+            <h1>{view === "overview" ? `上午好，${authUser?.name ?? "管理员"}` : view === "sessions" ? "课次管理" : view === "bookings" ? "预约管理" : view === "analytics" ? "经营统计" : view === "notifications" ? "站内通知" : view === "deliveries" ? "通知投递" : view === "audit" ? "审计日志" : masterLabels[view]}</h1>
           </div>
           {(view === "overview" || view === "sessions") && <button className="primary-button" onClick={openCreate}>
             <Icon size={18}><path d="M12 5v14M5 12h14" /></Icon>
@@ -994,12 +1051,120 @@ function App() {
           </section>
         </div>
       )}
+      {passwordDialogOpen && (
+        <AdminPasswordChangeDialog
+          onClose={() => setPasswordDialogOpen(false)}
+          onChanged={() => {
+            clearRememberedLogin();
+            setPasswordDialogOpen(false);
+            setAuthUser(undefined);
+            setAuthenticated(false);
+          }}
+        />
+      )}
     </div>
   );
 }
 
 function Field({ label, children, wide = false }: { label: string; children: ReactNode; wide?: boolean }) {
   return <label className={wide ? "field wide" : "field"}><span>{label}</span>{children}</label>;
+}
+
+function AdminForcePasswordChange({
+  name,
+  onChanged,
+  onLogout,
+}: {
+  name: string;
+  onChanged: () => void;
+  onLogout: () => void;
+}) {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (newPassword !== confirmation) {
+      setError("两次输入的新密码不一致");
+      return;
+    }
+    setSubmitting(true);
+    setError("");
+    try {
+      await changeAdminPassword(currentPassword, newPassword);
+      onChanged();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "密码修改失败");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  return <main className="login-page">
+    <form className="login-card" onSubmit={(event) => void submit(event)}>
+      <p className="eyebrow">账号安全</p>
+      <h1>请先修改密码</h1>
+      <p className="platform-login-hint">{name}，临时密码仅可用于首次登录。</p>
+      {error && <div className="load-error" role="alert">{error}</div>}
+      <Field label="当前密码"><input required minLength={8} type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></Field>
+      <Field label="新密码"><input required minLength={8} type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></Field>
+      <Field label="确认新密码"><input required minLength={8} type="password" autoComplete="new-password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></Field>
+      <button className="primary-button" disabled={submitting} type="submit">{submitting ? "正在修改…" : "修改密码"}</button>
+      <button className="text-button" type="button" onClick={onLogout}>退出登录</button>
+    </form>
+  </main>;
+}
+
+function AdminPasswordChangeDialog({
+  onClose,
+  onChanged,
+}: {
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (newPassword !== confirmation) {
+      setError("两次输入的新密码不一致");
+      return;
+    }
+    setSubmitting(true);
+    setError("");
+    try {
+      await changeAdminPassword(currentPassword, newPassword);
+      onChanged();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "密码修改失败");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  return <div className="dialog-backdrop" role="presentation">
+    <section className="dialog" role="dialog" aria-modal="true" aria-label="修改本人密码">
+      <div className="dialog-header">
+        <h2>修改本人密码</h2>
+        <button className="icon-button" aria-label="关闭" disabled={submitting} onClick={onClose}>×</button>
+      </div>
+      <form onSubmit={(event) => void submit(event)}>
+        {error && <div className="load-error" role="alert">{error}</div>}
+        <div className="form-grid">
+          <Field label="当前密码"><input required minLength={8} type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></Field>
+          <Field label="新密码"><input required minLength={8} type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></Field>
+          <Field label="确认新密码"><input required minLength={8} type="password" autoComplete="new-password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></Field>
+        </div>
+        <div className="dialog-actions">
+          <button className="secondary-button" type="button" disabled={submitting} onClick={onClose}>取消</button>
+          <button className="primary-button" type="submit" disabled={submitting}>{submitting ? "正在保存…" : "保存"}</button>
+        </div>
+      </form>
+    </section>
+  </div>;
 }
 
 function Select({ value, options, onChange }: { value: string; options: Option[]; onChange: (value: string) => void }) {

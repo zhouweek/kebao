@@ -25,6 +25,14 @@ import {
 } from "./domain.js";
 import type { AuthSession, AuthUser } from "./auth.js";
 import type {
+  PlatformAccount,
+  PlatformAudit,
+  PlatformOrganization,
+  PlatformRepository,
+  PlatformSession,
+  PlatformTenantAdmin,
+} from "./platform.js";
+import type {
   MasterDataItem,
   MasterDataPage,
   MasterDataQuery,
@@ -38,6 +46,8 @@ type SessionRow = PrismaSession & {
   teacher: { name: string };
 };
 
+const TRANSACTION_MAX_ATTEMPTS = 3;
+
 const sessionInclude = {
   course: { select: { name: true } },
   campus: { select: { name: true } },
@@ -45,7 +55,7 @@ const sessionInclude = {
   teacher: { select: { name: true } },
 } satisfies Prisma.CourseSessionInclude;
 
-export class PrismaRepository implements Repository {
+export class PrismaRepository implements Repository, PlatformRepository {
   private readonly transactions = new AsyncLocalStorage<Prisma.TransactionClient>();
 
   constructor(private readonly prisma: PrismaClient) {}
@@ -56,8 +66,21 @@ export class PrismaRepository implements Repository {
     );
   }
 
+  async isOrganizationActive(organizationId: string): Promise<boolean> {
+    return (
+      (await this.client.organization.count({
+        where: { id: organizationId, isActive: true, deletedAt: null },
+      })) === 1
+    );
+  }
+
   async listOrganizationIds(): Promise<string[]> {
-    return (await this.client.organization.findMany({ select: { id: true } }))
+    return (
+      await this.client.organization.findMany({
+        where: { isActive: true, deletedAt: null },
+        select: { id: true },
+      })
+    )
       .map((item) => item.id);
   }
 
@@ -92,6 +115,7 @@ export class PrismaRepository implements Repository {
         passwordHash: true,
         wechatOpenId: true,
         isActive: true,
+        mustChangePassword: true,
       },
     });
     return user ?? undefined;
@@ -112,6 +136,7 @@ export class PrismaRepository implements Repository {
         passwordHash: true,
         wechatOpenId: true,
         isActive: true,
+        mustChangePassword: true,
       },
     });
     return user ?? undefined;
@@ -160,13 +185,19 @@ export class PrismaRepository implements Repository {
 
   async rotateAuthSession(
     id: string,
+    expectedHash: string,
     refreshTokenHash: string,
     expiresAt: Date,
-  ): Promise<void> {
-    await this.client.authSession.update({
-      where: { id },
+  ): Promise<boolean> {
+    const result = await this.client.authSession.updateMany({
+      where: {
+        id,
+        refreshTokenHash: expectedHash,
+        revokedAt: null,
+      },
       data: { refreshTokenHash, expiresAt },
     });
+    return result.count === 1;
   }
 
   async revokeAuthSession(id: string): Promise<void> {
@@ -174,6 +205,27 @@ export class PrismaRepository implements Repository {
       where: { id, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+  }
+
+  async revokeAllUserSessions(userId: string, organizationId: string): Promise<void> {
+    await this.client.authSession.updateMany({
+      where: { userId, organizationId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
+  async updateUserPassword(
+    userId: string,
+    organizationId: string,
+    expectedPasswordHash: string,
+    passwordHash: string,
+    mustChangePassword: boolean,
+  ): Promise<boolean> {
+    const result = await this.client.user.updateMany({
+      where: { id: userId, organizationId, passwordHash: expectedPasswordHash },
+      data: { passwordHash, mustChangePassword },
+    });
+    return result.count === 1;
   }
 
   async touchUserLastLogin(
@@ -184,6 +236,265 @@ export class PrismaRepository implements Repository {
     await this.client.user.update({
       where: { id: userId, organizationId },
       data: { lastLoginAt: at },
+    });
+  }
+
+  async findPlatformAccount(username: string): Promise<PlatformAccount | undefined> {
+    return (
+      (await this.client.platformAccount.findUnique({ where: { username } })) ?? undefined
+    );
+  }
+
+  async getPlatformAccount(id: string): Promise<PlatformAccount | undefined> {
+    return (await this.client.platformAccount.findUnique({ where: { id } })) ?? undefined;
+  }
+
+  async createPlatformSession(session: PlatformSession): Promise<void> {
+    await this.client.platformSession.create({ data: session });
+  }
+
+  async getPlatformSessionById(id: string): Promise<PlatformSession | undefined> {
+    return (await this.client.platformSession.findUnique({ where: { id } })) ?? undefined;
+  }
+
+  async getPlatformSessionByRefreshTokenHash(hash: string): Promise<PlatformSession | undefined> {
+    return (
+      (await this.client.platformSession.findUnique({ where: { refreshTokenHash: hash } })) ??
+      undefined
+    );
+  }
+
+  async rotatePlatformSession(
+    id: string,
+    expectedHash: string,
+    refreshTokenHash: string,
+    expiresAt: Date,
+  ): Promise<boolean> {
+    const result = await this.client.platformSession.updateMany({
+      where: {
+        id,
+        refreshTokenHash: expectedHash,
+        revokedAt: null,
+      },
+      data: { refreshTokenHash, expiresAt },
+    });
+    return result.count === 1;
+  }
+
+  async revokePlatformSession(id: string): Promise<void> {
+    await this.client.platformSession.updateMany({
+      where: { id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
+  async revokeAllPlatformSessions(accountId: string): Promise<void> {
+    await this.client.platformSession.updateMany({
+      where: { accountId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
+  async touchPlatformLastLogin(accountId: string, at: Date): Promise<void> {
+    await this.client.platformAccount.update({ where: { id: accountId }, data: { lastLoginAt: at } });
+  }
+
+  async updatePlatformPassword(
+    accountId: string,
+    expectedPasswordHash: string,
+    passwordHash: string,
+    mustChangePassword: boolean,
+  ): Promise<boolean> {
+    const result = await this.client.platformAccount.updateMany({
+      where: { id: accountId, passwordHash: expectedPasswordHash },
+      data: { passwordHash, mustChangePassword },
+    });
+    return result.count === 1;
+  }
+
+  async listPlatformOrganizations(includeDeleted = false): Promise<PlatformOrganization[]> {
+    return this.client.organization.findMany({
+      where: includeDeleted ? {} : { deletedAt: null },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  async getPlatformOrganization(
+    id: string,
+    includeDeleted = false,
+  ): Promise<PlatformOrganization | undefined> {
+    return (
+      (await this.client.organization.findFirst({
+        where: { id, ...(includeDeleted ? {} : { deletedAt: null }) },
+      })) ?? undefined
+    );
+  }
+
+  async createPlatformOrganization(input: {
+    id: string;
+    code: string;
+    name: string;
+  }): Promise<PlatformOrganization> {
+    try {
+      return await this.client.organization.create({
+        data: { ...input, code: input.code.trim().toUpperCase() },
+      });
+    } catch (error) {
+      this.throwPlatformConflict(error);
+    }
+  }
+
+  async updatePlatformOrganization(
+    id: string,
+    input: { code?: string; name?: string },
+  ): Promise<PlatformOrganization> {
+    await this.requirePlatformOrganization(id);
+    try {
+      return await this.client.organization.update({
+        where: { id },
+        data: {
+          ...input,
+          ...(input.code === undefined
+            ? {}
+            : { code: input.code.trim().toUpperCase() }),
+        },
+      });
+    } catch (error) {
+      this.throwPlatformConflict(error);
+    }
+  }
+
+  async setPlatformOrganizationActive(id: string, isActive: boolean): Promise<PlatformOrganization> {
+    await this.requirePlatformOrganization(id);
+    const organization = await this.client.organization.update({
+      where: { id },
+      data: { isActive },
+    });
+    if (!isActive) {
+      await this.client.authSession.updateMany({
+        where: { organizationId: id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    }
+    return organization;
+  }
+
+  async softDeletePlatformOrganization(id: string): Promise<void> {
+    await this.requirePlatformOrganization(id);
+    const now = new Date();
+    await this.client.organization.update({
+      where: { id },
+      data: { isActive: false, deletedAt: now },
+    });
+    await this.client.authSession.updateMany({
+      where: { organizationId: id, revokedAt: null },
+      data: { revokedAt: now },
+    });
+  }
+
+  async listPlatformTenantAdmins(organizationId: string): Promise<PlatformTenantAdmin[]> {
+    await this.requirePlatformOrganization(organizationId);
+    return this.client.user.findMany({
+      where: { organizationId, role: "ADMIN" },
+      select: {
+        id: true, organizationId: true, name: true, phone: true, email: true,
+        isActive: true, mustChangePassword: true, lastLoginAt: true,
+        createdAt: true, updatedAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  async createPlatformTenantAdmin(input: {
+    id: string;
+    organizationId: string;
+    name: string;
+    phone: string;
+    email?: string | null;
+    passwordHash: string;
+  }): Promise<PlatformTenantAdmin> {
+    await this.requirePlatformOrganization(input.organizationId);
+    try {
+      return await this.client.user.create({
+        data: { ...input, role: "ADMIN", mustChangePassword: true },
+        select: {
+          id: true, organizationId: true, name: true, phone: true, email: true,
+          isActive: true, mustChangePassword: true, lastLoginAt: true,
+          createdAt: true, updatedAt: true,
+        },
+      });
+    } catch (error) {
+      this.throwPlatformConflict(error);
+    }
+  }
+
+  async updatePlatformTenantAdmin(
+    organizationId: string,
+    userId: string,
+    input: { name?: string; phone?: string; email?: string | null },
+  ): Promise<PlatformTenantAdmin> {
+    await this.requireTenantAdmin(organizationId, userId);
+    try {
+      return await this.client.user.update({
+        where: { id_organizationId: { id: userId, organizationId } },
+        data: input,
+        select: {
+          id: true, organizationId: true, name: true, phone: true, email: true,
+          isActive: true, mustChangePassword: true, lastLoginAt: true,
+          createdAt: true, updatedAt: true,
+        },
+      });
+    } catch (error) {
+      this.throwPlatformConflict(error);
+    }
+  }
+
+  async setPlatformTenantAdminActive(
+    organizationId: string,
+    userId: string,
+    isActive: boolean,
+  ): Promise<PlatformTenantAdmin> {
+    await this.requireTenantAdmin(organizationId, userId);
+    const user = await this.client.user.update({
+      where: { id_organizationId: { id: userId, organizationId } },
+      data: { isActive },
+      select: {
+        id: true, organizationId: true, name: true, phone: true, email: true,
+        isActive: true, mustChangePassword: true, lastLoginAt: true,
+        createdAt: true, updatedAt: true,
+      },
+    });
+    if (!isActive) await this.revokeTenantUserSessions(organizationId, userId);
+    return user;
+  }
+
+  async resetPlatformTenantAdminPassword(
+    organizationId: string,
+    userId: string,
+    passwordHash: string,
+  ): Promise<void> {
+    await this.requireTenantAdmin(organizationId, userId);
+    await this.client.user.update({
+      where: { id_organizationId: { id: userId, organizationId } },
+      data: { passwordHash, mustChangePassword: true },
+    });
+    await this.revokeTenantUserSessions(organizationId, userId);
+  }
+
+  async revokeTenantUserSessions(organizationId: string, userId: string): Promise<void> {
+    await this.revokeAllUserSessions(userId, organizationId);
+  }
+
+  async savePlatformAudit(log: PlatformAudit): Promise<void> {
+    await this.client.platformAuditLog.create({
+      data: { ...log, details: log.details as Prisma.InputJsonValue },
+    });
+  }
+
+  async listPlatformAudits(limit: number): Promise<PlatformAudit[]> {
+    return this.client.platformAuditLog.findMany({
+      take: limit,
+      orderBy: { createdAt: "desc" },
     });
   }
 
@@ -1047,10 +1358,18 @@ export class PrismaRepository implements Repository {
 
   async withTransaction<T>(action: () => Promise<T>): Promise<T> {
     if (this.transactions.getStore()) return action();
-    return this.prisma.$transaction(
-      (transaction) => this.transactions.run(transaction, action),
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-    );
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(
+          (transaction) => this.transactions.run(transaction, action),
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+      } catch (error) {
+        if (!this.isTransactionWriteConflict(error) || attempt >= TRANSACTION_MAX_ATTEMPTS) {
+          throw error;
+        }
+      }
+    }
   }
 
   async disconnect(): Promise<void> {
@@ -1088,6 +1407,29 @@ export class PrismaRepository implements Repository {
       throw new DomainError("MASTER_DATA_NOT_FOUND", "基础资料不存在", 404);
     }
     return item;
+  }
+
+  private async requirePlatformOrganization(id: string): Promise<void> {
+    const exists = await this.client.organization.count({ where: { id, deletedAt: null } });
+    if (!exists) {
+      throw new DomainError("ORGANIZATION_NOT_FOUND", "机构不存在或已删除", 404);
+    }
+  }
+
+  private async requireTenantAdmin(organizationId: string, userId: string): Promise<void> {
+    const exists = await this.client.user.count({
+      where: { id: userId, organizationId, role: "ADMIN" },
+    });
+    if (!exists) {
+      throw new DomainError("TENANT_ADMIN_NOT_FOUND", "机构管理员不存在", 404);
+    }
+  }
+
+  private throwPlatformConflict(error: unknown): never {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      throw new DomainError("DUPLICATE_RESOURCE", "编码、手机号或账号已存在", 409);
+    }
+    throw error;
   }
 
   private async validateMasterReferences(
@@ -1195,6 +1537,13 @@ export class PrismaRepository implements Repository {
       error.message.includes("23P01") ||
       error.message.includes("CourseSession_teacher_time_excl") ||
       error.message.includes("CourseSession_classroom_time_excl")
+    );
+  }
+
+  private isTransactionWriteConflict(error: unknown): boolean {
+    return (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2034"
     );
   }
 }

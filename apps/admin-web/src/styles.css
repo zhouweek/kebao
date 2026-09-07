@@ -71,6 +71,85 @@ button { cursor: pointer; }
   margin: 0;
   accent-color: var(--green);
 }
+.platform-login-hint { margin: -10px 0 0; color: var(--muted); font-size: 13px; }
+
+.platform-shell { min-height: 100vh; background: var(--cream); }
+.platform-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 96px;
+  padding: 20px max(28px, calc((100vw - 1280px) / 2));
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, .94);
+  backdrop-filter: blur(10px);
+}
+.platform-account { display: flex; align-items: center; gap: 16px; }
+.platform-account b, .platform-account small { display: block; text-align: right; }
+.platform-account b { color: var(--ink); font-size: 13px; }
+.platform-account small { margin-top: 2px; color: var(--muted); font-size: 11px; }
+.platform-main {
+  width: min(1280px, calc(100% - 56px));
+  min-height: auto;
+  margin: 0 auto;
+  padding: 34px 0 64px;
+}
+.platform-organizations, .platform-admins { margin-bottom: 42px; }
+.organization-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+.organization-card {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  transition: .16s ease;
+}
+.organization-card.active { border-color: #719078; box-shadow: 0 0 0 2px #e2ece3; }
+.organization-select {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 18px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+.organization-select b, .organization-select small { display: block; }
+.organization-select b { margin-bottom: 4px; font-size: 15px; }
+.organization-select small { color: var(--muted); font-size: 11px; }
+.organization-actions { display: flex; gap: 4px; padding: 9px 12px; border-top: 1px solid var(--line); background: #fafbf9; }
+.organization-actions button {
+  border: 0;
+  border-radius: 5px;
+  padding: 5px 7px;
+  background: transparent;
+  color: var(--green);
+  font-size: 11px;
+}
+.organization-actions button:hover { background: var(--green-soft); }
+.organization-actions .danger-link { margin-left: auto; color: #a45a51; }
+.platform-table .row-actions { flex-wrap: wrap; }
+.temporary-password { display: grid; gap: 18px; padding: 24px 27px 28px; }
+.temporary-password p { margin: 0; color: #8a5c29; font-size: 13px; }
+.temporary-password code {
+  padding: 18px;
+  border: 1px dashed #b8c5b8;
+  border-radius: 9px;
+  background: #f5f8f4;
+  color: #294431;
+  font: 700 20px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .08em;
+  text-align: center;
+  user-select: all;
+}
 
 .app-shell { min-height: 100vh; }
 .sidebar {
@@ -97,7 +176,9 @@ nav { display: grid; gap: 7px; }
 .sidebar-foot b { font-size: 13px; margin-bottom: 2px; }
 .sidebar-foot small { color: #949990; }
 .avatar { display: grid; place-items: center; width: 35px; height: 35px; border-radius: 50%; background: #e8eee6; color: var(--green); font-weight: 700; }
-.more { color: #989d96; margin-left: auto; letter-spacing: .1em; }
+.account-actions { display: grid; gap: 2px; margin-left: auto; }
+.more { border: 0; background: transparent; color: #7d857b; padding: 2px 0; font-size: 11px; }
+.more:hover { color: var(--green-dark); }
 
 main { margin-left: 232px; min-height: 100vh; padding: 0 6vw 60px; }
 .topbar {
@@ -321,6 +402,8 @@ td code { display: block; max-width: 280px; overflow: hidden; color: #72786f; fo
   .booking-filters { grid-template-columns: repeat(3, 1fr); }
   .analytics-filters { grid-template-columns: repeat(3, 1fr); }
   .analytics-metrics { grid-template-columns: repeat(3, 1fr); }
+  .platform-header { padding: 18px; }
+  .platform-main { width: calc(100% - 36px); padding-top: 24px; }
 }
 @media (max-width: 760px) {
   .sidebar { position: static; width: 100%; height: 68px; padding: 10px 16px; flex-direction: row; align-items: center; border-right: 0; border-bottom: 1px solid var(--line); }
@@ -354,6 +437,7 @@ td code { display: block; max-width: 280px; overflow: hidden; color: #72786f; fo
   .analytics-filters, .analytics-metrics, .analytics-definition ul { grid-template-columns: 1fr; }
   .dialog-backdrop { padding: 0; align-items: end; }
   .dialog { border-radius: 17px 17px 0 0; max-height: 94vh; }
+  .platform-account span { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

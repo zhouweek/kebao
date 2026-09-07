@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { HttpMetrics } from "../src/observability.js";
 import { loadRuntimeConfig } from "../src/production-config.js";
@@ -13,6 +14,7 @@ describe("loadRuntimeConfig", () => {
       NODE_ENV: "production",
       DATABASE_URL: "postgresql://user:password@postgres:5432/kebao",
       AUTH_TOKEN_SECRET: "a-secure-random-secret-with-32-characters",
+      PLATFORM_AUTH_TOKEN_SECRET: "another-platform-only-secret-with-32-characters",
       CORS_ORIGINS: "https://admin.example.com, https://ops.example.com",
       RATE_LIMIT_MAX: "120",
       RATE_LIMIT_WINDOW_MS: "30000",
@@ -22,6 +24,7 @@ describe("loadRuntimeConfig", () => {
 
     expect(config).toMatchObject({
       nodeEnv: "production",
+      platformTokenSecret: "another-platform-only-secret-with-32-characters",
       developmentIdentityEnabled: false,
       corsOrigins: ["https://admin.example.com", "https://ops.example.com"],
       rateLimitMax: 120,
@@ -38,12 +41,74 @@ describe("loadRuntimeConfig", () => {
         AUTH_TOKEN_SECRET: "replace-with-at-least-32-random-characters",
         CORS_ORIGINS: "http://admin.example.com",
       }),
-    ).toThrow(/DATABASE_URL.*AUTH_TOKEN_SECRET.*https:\/\/.*TRUST_PROXY/);
+    ).toThrow(/DATABASE_URL.*AUTH_TOKEN_SECRET.*PLATFORM_AUTH_TOKEN_SECRET.*https:\/\/.*TRUST_PROXY/);
+  });
+
+  it("拒绝 replace-with 占位平台密钥", () => {
+    expect(() =>
+      loadRuntimeConfig({
+        NODE_ENV: "production",
+        DATABASE_URL: "postgresql://user:password@postgres:5432/kebao",
+        AUTH_TOKEN_SECRET: "a-secure-random-secret-with-32-characters",
+        PLATFORM_AUTH_TOKEN_SECRET: "replace-with-platform-random-secret-123456",
+        CORS_ORIGINS: "https://admin.example.com",
+        METRICS_TOKEN: "metrics-secret-long",
+        TRUST_PROXY: "true",
+      }),
+    ).toThrow(/PLATFORM_AUTH_TOKEN_SECRET/);
+  });
+
+  it("[defect-probing] 拒绝生产环境全空白的平台密钥", () => {
+    expect(() =>
+      loadRuntimeConfig({
+        NODE_ENV: "production",
+        DATABASE_URL: "postgresql://user:password@postgres:5432/kebao",
+        AUTH_TOKEN_SECRET: "a-secure-random-secret-with-32-characters",
+        PLATFORM_AUTH_TOKEN_SECRET: " ".repeat(32),
+        CORS_ORIGINS: "https://admin.example.com",
+        METRICS_TOKEN: "metrics-secret-long",
+        TRUST_PROXY: "true",
+      }),
+    ).toThrow(/PLATFORM_AUTH_TOKEN_SECRET/);
+  });
+
+  it.each([
+    ["首部空白", ` ${"p".repeat(32)}`],
+    ["尾部空白", `${"p".repeat(32)} `],
+    ["trim 后有效长度不足 32 位", ` ${"p".repeat(30)} `],
+    ["trim 后与租户密钥相同", ` ${"t".repeat(32)} `],
+  ])("[defect-probing] 拒绝%s的平台密钥", (_scenario, platformSecret) => {
+    expect(() =>
+      loadRuntimeConfig({
+        NODE_ENV: "production",
+        DATABASE_URL: "postgresql://user:password@postgres:5432/kebao",
+        AUTH_TOKEN_SECRET: "t".repeat(32),
+        PLATFORM_AUTH_TOKEN_SECRET: platformSecret,
+        CORS_ORIGINS: "https://admin.example.com",
+        METRICS_TOKEN: "metrics-secret-long",
+        TRUST_PROXY: "true",
+      }),
+    ).toThrow(/PLATFORM_AUTH_TOKEN_SECRET/);
   });
 
   it("[defect-probing] 拒绝未知 NODE_ENV，避免拼写错误绕过生产校验", () => {
     expect(() => loadRuntimeConfig({ NODE_ENV: "prodution" })).toThrow(
       /NODE_ENV/,
+    );
+  });
+});
+
+describe("生产 API 入口", () => {
+  it("[defect-probing] 同时保留租户密码同步与平台管理员引导", async () => {
+    const entrypoint = await readFile(
+      new URL("../../../deploy/api-entrypoint.sh", import.meta.url),
+      "utf8",
+    );
+
+    expect(entrypoint).toContain("node dist/sync-seed-admin-password.js");
+    expect(entrypoint).toContain("node dist/bootstrap-platform-admin.js");
+    expect(entrypoint.indexOf("sync-seed-admin-password.js")).toBeLessThan(
+      entrypoint.indexOf("bootstrap-platform-admin.js"),
     );
   });
 });

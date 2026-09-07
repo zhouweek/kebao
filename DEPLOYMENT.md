@@ -33,6 +33,11 @@ chmod 600 .env.production
 - `POSTGRES_PASSWORD`：数据库强密码。
 - `DATABASE_URL`：与数据库账号密码一致；密码中的特殊字符必须 URL 编码。
 - `AUTH_TOKEN_SECRET`：至少 32 位随机值。
+- `PLATFORM_AUTH_TOKEN_SECRET`：平台管理员令牌使用的独立随机值，至少 32 位且不得与
+  `AUTH_TOKEN_SECRET` 相同。
+- `PLATFORM_ADMIN_USERNAME` / `PLATFORM_ADMIN_PASSWORD`：可选的首次启动平台管理员
+  凭据。设置密码后，API 启动时仅在账号不存在时创建账号且要求首次登录改密；已有账号
+  不会被覆盖。不需要初始化账号时将密码留空。
 - `METRICS_TOKEN`：至少 16 位随机值，监控采集时作为 Bearer Token。
 - `CORS_ORIGINS`：逗号分隔的管理后台 HTTPS 来源。
 - `TLS_CERT_DIR`：宿主机证书目录的绝对路径。
@@ -59,6 +64,7 @@ API 在 `NODE_ENV=production` 时会拒绝以下配置：
 
 - 缺少 `DATABASE_URL`。
 - 弱口令或示例值 `AUTH_TOKEN_SECRET`。
+- 缺少、弱口令、示例值或与普通令牌密钥相同的 `PLATFORM_AUTH_TOKEN_SECRET`。
 - `DEV_IDENTITY_ENABLED=true`。
 - 空 CORS 列表或非 HTTPS CORS 来源。
 - 未设置 `TRUST_PROXY=true`。

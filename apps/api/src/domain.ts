@@ -1,4 +1,5 @@
 import type { AuthRepository } from "./auth.js";
+import type { PlatformRepository } from "./platform.js";
 import type { MasterDataRepository } from "./master-data.js";
 
 export type SessionStatus =
@@ -238,7 +239,7 @@ export interface CreateSessionInput {
   cancelDeadlineAt?: Date;
 }
 
-export interface Repository extends AuthRepository, MasterDataRepository {
+export interface Repository extends AuthRepository, PlatformRepository, MasterDataRepository {
   listOrganizationIds(): Promise<string[]>;
   organizationExists(organizationId: string): Promise<boolean>;
   getUserIdentity(organizationId: string, userId: string): Promise<UserIdentity | undefined>;

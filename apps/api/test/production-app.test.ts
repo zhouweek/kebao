@@ -1,11 +1,20 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { buildApp } from "../src/app.js";
 import { MemoryRepository } from "../src/memory-repository.js";
 
 const apps: ReturnType<typeof buildApp>[] = [];
+const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
+  await Promise.all(
+    temporaryDirectories.splice(0).map((directory) =>
+      rm(directory, { recursive: true, force: true }),
+    ),
+  );
 });
 
 describe("生产 HTTP 边界", () => {
@@ -74,6 +83,27 @@ describe("生产 HTTP 边界", () => {
     });
     expect(metrics.statusCode).toBe(200);
     expect(metrics.body).toContain("kebao_http_requests_total");
+  });
+
+  it("以安全 CSP 提供 /platform 和 /platform/ 静态入口", async () => {
+    const root = await mkdtemp(join(tmpdir(), "kebao-admin-web-"));
+    temporaryDirectories.push(root);
+    await writeFile(join(root, "index.html"), "<!doctype html><title>platform</title>");
+    const app = buildApp(new MemoryRepository(), { adminWebRoot: root });
+    apps.push(app);
+
+    for (const url of ["/platform", "/platform/"]) {
+      const response = await app.inject({ method: "GET", url });
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain("<title>platform</title>");
+      expect(response.headers["cache-control"]).toBe("no-cache");
+      expect(response.headers["content-security-policy"]).toContain(
+        "default-src 'self'",
+      );
+      expect(response.headers["content-security-policy"]).not.toBe(
+        "default-src 'none'; frame-ancestors 'none'",
+      );
+    }
   });
 });
 
