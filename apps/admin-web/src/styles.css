@@ -38,6 +38,39 @@ button { cursor: pointer; }
 }
 
 .login-card .primary-button { justify-content: center; }
+.password-input { position: relative; }
+.password-input input { padding-right: 46px; }
+.password-visibility {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  color: #70776e;
+  background: transparent;
+  transform: translateY(-50%);
+}
+.password-visibility:hover { color: var(--green-dark); background: var(--green-soft); }
+.password-visibility:focus-visible { outline: 2px solid #708b75; outline-offset: 1px; }
+.remember-login {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #596057;
+  font-size: 13px;
+  cursor: pointer;
+}
+.remember-login input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--green);
+}
 
 .app-shell { min-height: 100vh; }
 .sidebar {

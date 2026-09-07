@@ -72,6 +72,75 @@ beforeEach(() => {
 });
 
 describe("管理后台", () => {
+  it("支持显示密码并记住登录信息", async () => {
+    localStorage.clear();
+    const fetcher = vi.fn(async (input: RequestInfo | URL) =>
+      new Response(
+        JSON.stringify(
+          input === "/auth/admin/login"
+            ? {
+                data: {
+                  accessToken: "new-access",
+                  refreshToken: "new-refresh",
+                  accessTokenExpiresIn: 900,
+                  user: {
+                    id: "admin-1",
+                    organizationId: "org-development",
+                    role: "ADMIN",
+                    name: "管理员",
+                    phone: "13800000001",
+                  },
+                },
+              }
+            : { data: [session] },
+        ),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText("机构编码"), {
+      target: { value: "DEMO" },
+    });
+    fireEvent.change(screen.getByLabelText("手机号"), {
+      target: { value: "13800000001" },
+    });
+    const password = screen.getByLabelText("密码");
+    fireEvent.change(password, { target: { value: "Admin123!" } });
+    expect(password).toHaveAttribute("type", "password");
+    fireEvent.click(screen.getByRole("button", { name: "显示密码" }));
+    expect(password).toHaveAttribute("type", "text");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "记住上次登录信息" }));
+    fireEvent.click(screen.getByRole("button", { name: "登录" }));
+    await screen.findByText("少儿编程 L2");
+
+    expect(JSON.parse(localStorage.getItem("kebao.admin.login-credentials")!)).toEqual({
+      organizationCode: "DEMO",
+      phone: "13800000001",
+      password: "Admin123!",
+    });
+  });
+
+  it("自动回填上次记住的登录信息", () => {
+    localStorage.clear();
+    localStorage.setItem(
+      "kebao.admin.login-credentials",
+      JSON.stringify({
+        organizationCode: "DEMO",
+        phone: "13800000001",
+        password: "Admin123!",
+      }),
+    );
+    render(<App />);
+
+    expect(screen.getByLabelText("机构编码")).toHaveValue("DEMO");
+    expect(screen.getByLabelText("手机号")).toHaveValue("13800000001");
+    expect(screen.getByLabelText("密码")).toHaveValue("Admin123!");
+    expect(screen.getByRole("checkbox", { name: "记住上次登录信息" })).toBeChecked();
+  });
+
   it("未登录时展示手机号密码登录并在成功后加载课次", async () => {
     localStorage.clear();
     const fetcher = vi.fn(async (input: RequestInfo | URL) =>

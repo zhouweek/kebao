@@ -46,6 +46,36 @@ type View =
   | MasterResource;
 type Operation = "reschedule" | "cancel" | "attendance";
 
+const LOGIN_CREDENTIALS_STORAGE_KEY = "kebao.admin.login-credentials";
+
+interface LoginCredentials {
+  organizationCode: string;
+  phone: string;
+  password: string;
+}
+
+function storedLoginCredentials(): LoginCredentials | undefined {
+  try {
+    const value = localStorage.getItem(LOGIN_CREDENTIALS_STORAGE_KEY);
+    if (!value) return undefined;
+    const parsed = JSON.parse(value) as Partial<LoginCredentials>;
+    if (
+      typeof parsed.organizationCode !== "string" ||
+      typeof parsed.phone !== "string" ||
+      typeof parsed.password !== "string"
+    ) {
+      return undefined;
+    }
+    return {
+      organizationCode: parsed.organizationCode,
+      phone: parsed.phone,
+      password: parsed.password,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 interface Option {
   id: string;
   name: string;
@@ -176,12 +206,19 @@ function timeText(value: string) {
 }
 
 function App() {
+  const rememberedLogin = useMemo(() => storedLoginCredentials(), []);
   const [authenticated, setAuthenticated] = useState(
     () => hasAuth() || isDevelopmentIdentityEnabled(),
   );
-  const [loginOrganizationCode, setLoginOrganizationCode] = useState("");
-  const [loginPhone, setLoginPhone] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
+  const [loginOrganizationCode, setLoginOrganizationCode] = useState(
+    rememberedLogin?.organizationCode ?? "",
+  );
+  const [loginPhone, setLoginPhone] = useState(rememberedLogin?.phone ?? "");
+  const [loginPassword, setLoginPassword] = useState(
+    rememberedLogin?.password ?? "",
+  );
+  const [rememberLogin, setRememberLogin] = useState(Boolean(rememberedLogin));
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [loginSubmitting, setLoginSubmitting] = useState(false);
   const [view, setView] = useState<View>("overview");
@@ -265,6 +302,18 @@ function App() {
         loginPhone.trim(),
         loginPassword,
       );
+      if (rememberLogin) {
+        localStorage.setItem(
+          LOGIN_CREDENTIALS_STORAGE_KEY,
+          JSON.stringify({
+            organizationCode: loginOrganizationCode.trim(),
+            phone: loginPhone.trim(),
+            password: loginPassword,
+          } satisfies LoginCredentials),
+        );
+      } else {
+        localStorage.removeItem(LOGIN_CREDENTIALS_STORAGE_KEY);
+      }
       setAuthenticated(true);
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : "登录失败");
@@ -553,15 +602,52 @@ function App() {
             />
           </Field>
           <Field label="密码">
-            <input
-              autoComplete="current-password"
-              minLength={8}
-              required
-              type="password"
-              value={loginPassword}
-              onChange={(event) => setLoginPassword(event.target.value)}
-            />
+            <div className="password-input">
+              <input
+                autoComplete="current-password"
+                minLength={8}
+                required
+                type={passwordVisible ? "text" : "password"}
+                value={loginPassword}
+                onChange={(event) => setLoginPassword(event.target.value)}
+              />
+              <button
+                type="button"
+                className="password-visibility"
+                aria-label={passwordVisible ? "隐藏密码" : "显示密码"}
+                aria-pressed={passwordVisible}
+                onClick={() => setPasswordVisible((current) => !current)}
+              >
+                <Icon size={19}>
+                  {passwordVisible ? (
+                    <>
+                      <path d="M3 3l18 18" />
+                      <path d="M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 4.2A10.7 10.7 0 0 1 12 4c5 0 9 5 9 8a9.8 9.8 0 0 1-2 3.8M6.6 6.6C4.4 8 3 10.2 3 12c0 3 4 8 9 8 1.2 0 2.4-.3 3.4-.8" />
+                    </>
+                  ) : (
+                    <>
+                      <path d="M3 12c0-3 4-8 9-8s9 5 9 8-4 8-9 8-9-5-9-8Z" />
+                      <circle cx="12" cy="12" r="2.5" />
+                    </>
+                  )}
+                </Icon>
+              </button>
+            </div>
           </Field>
+          <label className="remember-login">
+            <input
+              type="checkbox"
+              checked={rememberLogin}
+              onChange={(event) => {
+                const checked = event.target.checked;
+                setRememberLogin(checked);
+                if (!checked) {
+                  localStorage.removeItem(LOGIN_CREDENTIALS_STORAGE_KEY);
+                }
+              }}
+            />
+            <span>记住上次登录信息</span>
+          </label>
           <button className="primary-button" disabled={loginSubmitting} type="submit">
             {loginSubmitting ? "正在登录…" : "登录"}
           </button>
