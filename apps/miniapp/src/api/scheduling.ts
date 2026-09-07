@@ -5,6 +5,7 @@ import type {
   CourseSession,
   CreateSessionInput,
   CreateSeriesInput,
+  GuardianStudent,
   RescheduleSessionInput,
   RosterStudent,
   SessionStatus,
@@ -37,6 +38,13 @@ export async function listSessions(
 ): Promise<CourseSession[]> {
   const response = await request<DataResponse<CourseSession[]>>(
     `/sessions${toQuery(filters)}`,
+  );
+  return response.data;
+}
+
+export async function listGuardianStudents(): Promise<GuardianStudent[]> {
+  const response = await request<DataResponse<GuardianStudent[]>>(
+    "/guardian/students",
   );
   return response.data;
 }

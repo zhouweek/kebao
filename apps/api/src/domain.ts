@@ -87,6 +87,11 @@ export interface Student {
   guardianPhone: string;
 }
 
+export interface GuardianStudent {
+  id: string;
+  name: string;
+}
+
 export interface Booking {
   id: string;
   sessionId: string;
@@ -242,6 +247,10 @@ export interface Repository extends AuthRepository, MasterDataRepository {
     guardianId: string,
     studentId: string,
   ): Promise<boolean>;
+  listGuardianStudents(
+    organizationId: string,
+    guardianId: string,
+  ): Promise<GuardianStudent[]>;
   listSessions(organizationId: string, filter: SessionFilter): Promise<CourseSession[]>;
   getSession(organizationId: string, id: string): Promise<CourseSession | undefined>;
   saveSession(organizationId: string, session: CourseSession): Promise<void>;

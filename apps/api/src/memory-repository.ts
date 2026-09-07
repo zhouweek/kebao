@@ -268,6 +268,22 @@ export class MemoryRepository implements Repository {
     return this.guardians.has(this.guardianKey(organizationId, guardianId, studentId));
   }
 
+  async listGuardianStudents(
+    organizationId: string,
+    guardianId: string,
+  ): Promise<Array<{ id: string; name: string }>> {
+    return [...this.students.values()]
+      .filter(
+        (student) =>
+          student.organizationId === organizationId &&
+          this.guardians.has(
+            this.guardianKey(organizationId, guardianId, student.id),
+          ),
+      )
+      .map((student) => ({ id: student.id, name: student.name }))
+      .sort((left, right) => left.name.localeCompare(right.name, "zh-CN"));
+  }
+
   async listMasterData(
     organizationId: string,
     resource: MasterResource,

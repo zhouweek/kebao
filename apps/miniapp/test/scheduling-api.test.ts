@@ -14,6 +14,7 @@ import {
   createSeries,
   getTeacherOptions,
   getRoster,
+  listGuardianStudents,
   listSessions,
   markAttendance,
   previewSeries,
@@ -52,6 +53,14 @@ describe("排课 API 封装", () => {
 
     await expect(getTeacherOptions()).resolves.toBe(options);
     expect(requestMock).toHaveBeenCalledWith("/teacher/options");
+  });
+
+  it("读取当前家长绑定的学生", async () => {
+    const students = [{ id: "student-1", name: "林小满" }];
+    requestMock.mockResolvedValue({ data: students });
+
+    await expect(listGuardianStudents()).resolves.toBe(students);
+    expect(requestMock).toHaveBeenCalledWith("/guardian/students");
   });
 
   it("按契约创建课次", async () => {

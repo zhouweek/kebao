@@ -149,6 +149,20 @@ describe("开发身份中间件与授权", () => {
     expect(response.json().error.code).toBe("STUDENT_FORBIDDEN");
   });
 
+  it("家长只能读取本人绑定的学生", async () => {
+    const app = createApp();
+    const response = await app.inject({
+      method: "GET",
+      url: "/guardian/students",
+      headers: headers("org-a", "GUARDIAN", "guardian-a"),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toEqual([
+      { id: "student-a", name: "学生甲" },
+    ]);
+  });
+
   it("课次列表按机构隔离", async () => {
     const app = createApp();
     const response = await app.inject({

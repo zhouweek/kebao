@@ -525,6 +525,17 @@ export function buildApp(
     return { data: publicUser(user) };
   });
 
+  app.get(
+    "/guardian/students",
+    { preHandler: authorize(["GUARDIAN"]) },
+    async (request) => ({
+      data: await repository.listGuardianStudents(
+        request.auth.organizationId,
+        request.auth.id,
+      ),
+    }),
+  );
+
   app.get<{ Querystring: SessionQuery }>("/sessions", async (request) => {
     const query = request.query;
     const filter: SessionFilter = {};

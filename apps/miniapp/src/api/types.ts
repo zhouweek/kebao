@@ -42,6 +42,11 @@ export interface Booking {
   createdAt: string;
 }
 
+export interface GuardianStudent {
+  id: string;
+  name: string;
+}
+
 export interface RosterStudent {
   id: string;
   name: string;

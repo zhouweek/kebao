@@ -199,6 +199,21 @@ export class PrismaRepository implements Repository {
     );
   }
 
+  async listGuardianStudents(
+    organizationId: string,
+    guardianId: string,
+  ): Promise<Array<{ id: string; name: string }>> {
+    return this.client.student.findMany({
+      where: {
+        organizationId,
+        isActive: true,
+        guardianLinks: { some: { guardianId } },
+      },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
+  }
+
   async listMasterData(
     organizationId: string,
     resource: MasterResource,

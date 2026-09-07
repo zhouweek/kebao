@@ -1,15 +1,15 @@
-import { Button, Text, View } from "@tarojs/components";
+import { Button, Picker, Text, View } from "@tarojs/components";
 import Taro, { useDidShow, usePullDownRefresh } from "@tarojs/taro";
 import { useCallback, useState } from "react";
 import {
   bookSession,
   cancelBooking as cancelBookingRequest,
+  listGuardianStudents,
   listSessions,
 } from "../../api/scheduling";
-import type { CourseSession } from "../../api/types";
+import type { CourseSession, GuardianStudent } from "../../api/types";
 import { getErrorMessage } from "../../api/client";
 import {
-  getIdentity,
   getSavedBookings,
   markBookingCancelled,
   saveBooking,
@@ -26,16 +26,32 @@ type Tab = "available" | "mine";
 export default function ParentPage() {
   const [tab, setTab] = useState<Tab>("available");
   const [sessions, setSessions] = useState<CourseSession[]>([]);
+  const [students, setStudents] = useState<GuardianStudent[]>([]);
+  const [selectedStudentId, setSelectedStudentId] = useState("");
   const [bookings, setBookings] = useState<SavedBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingId, setPendingId] = useState<string>();
-  const identity = getIdentity();
-  const studentId = identity?.role === "parent" ? identity.id : "student-1";
+  const selectedStudent = students.find(
+    (student) => student.id === selectedStudentId,
+  );
+  const selectedStudentBookings = bookings.filter(
+    (item) => item.booking.studentId === selectedStudentId,
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setSessions(await listSessions({ status: "PUBLISHED" }));
+      const [nextSessions, nextStudents] = await Promise.all([
+        listSessions({ status: "PUBLISHED" }),
+        listGuardianStudents(),
+      ]);
+      setSessions(nextSessions);
+      setStudents(nextStudents);
+      setSelectedStudentId((current) =>
+        nextStudents.some((student) => student.id === current)
+          ? current
+          : (nextStudents[0]?.id ?? ""),
+      );
       setBookings(getSavedBookings());
     } catch (error) {
       await Taro.showToast({ title: getErrorMessage(error), icon: "none" });
@@ -54,9 +70,16 @@ export default function ParentPage() {
 
   const handleBook = async (session: CourseSession) => {
     if (pendingId) return;
+    if (!selectedStudentId) {
+      await Taro.showToast({
+        title: "请联系机构绑定学生",
+        icon: "none",
+      });
+      return;
+    }
     setPendingId(session.id);
     try {
-      const result = await bookSession(session.id, studentId);
+      const result = await bookSession(session.id, selectedStudentId);
       saveBooking({
         booking: result.booking,
         courseName: session.courseName,
@@ -105,7 +128,9 @@ export default function ParentPage() {
         <View className="row">
           <View>
             <Text className="hero-title">课程预约</Text>
-            <Text className="hero-subtitle">当前学生：林小满</Text>
+            <Text className="hero-subtitle">
+              当前学生：{selectedStudent?.name ?? "尚未绑定"}
+            </Text>
           </View>
           <Text
             className="hero-link"
@@ -115,6 +140,32 @@ export default function ParentPage() {
           </Text>
         </View>
       </View>
+      {!loading && students.length === 0 ? (
+        <View className="card">
+          <Text className="title">尚未绑定学生</Text>
+          <Text className="muted">
+            请联系机构管理员，在学生管理中绑定当前家长后再预约。
+          </Text>
+        </View>
+      ) : null}
+      {students.length > 1 ? (
+        <Picker
+          mode="selector"
+          range={students.map((student) => student.name)}
+          value={Math.max(
+            0,
+            students.findIndex((student) => student.id === selectedStudentId),
+          )}
+          onChange={(event) => {
+            const next = students[Number(event.detail.value)];
+            if (next) setSelectedStudentId(next.id);
+          }}
+        >
+          <View className="status-filter">
+            切换学生：{selectedStudent?.name ?? "请选择"}
+          </View>
+        </Picker>
+      ) : null}
       <View className="tabs">
         <View
           className={`tab ${tab === "available" ? "active" : ""}`}
@@ -155,7 +206,11 @@ export default function ParentPage() {
                 </Text>
                 <Button
                   className="primary"
-                  disabled={!availability.enabled || pendingId === session.id}
+                  disabled={
+                    !availability.enabled ||
+                    !selectedStudentId ||
+                    pendingId === session.id
+                  }
                   loading={pendingId === session.id}
                   onClick={() => void handleBook(session)}
                 >
@@ -178,11 +233,11 @@ export default function ParentPage() {
           })
         : null}
 
-      {!loading && tab === "mine" && bookings.length === 0 ? (
+      {!loading && tab === "mine" && selectedStudentBookings.length === 0 ? (
         <View className="empty">还没有通过本设备预约的课程</View>
       ) : null}
       {!loading && tab === "mine"
-        ? bookings.map((item) => {
+        ? selectedStudentBookings.map((item) => {
             const active = item.booking.status === "CONFIRMED";
             const cancellable =
               active && canCancelBooking(item.cancelDeadlineAt);
