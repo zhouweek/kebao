@@ -64,6 +64,18 @@ button {
   margin-top: 12px;
 }
 
+.remember-login {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+  color: #475467;
+}
+
+.remember-login checkbox {
+  transform: scale(0.86);
+}
+
 .row {
   display: flex;
   align-items: center;

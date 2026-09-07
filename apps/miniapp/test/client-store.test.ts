@@ -15,12 +15,15 @@ vi.mock("@tarojs/taro", () => ({
 import { ApiError, getErrorMessage, request } from "../src/api/client";
 import { loginWithWechatDemo } from "../src/api/auth";
 import {
+  clearRememberedLogin,
   getSavedBookings,
   getAuth,
+  getRememberedLogin,
   markBookingCancelled,
   saveAuth,
   saveBooking,
   saveIdentity,
+  saveRememberedLogin,
   type SavedBooking,
 } from "../src/store/session";
 
@@ -206,6 +209,26 @@ describe("本地身份与预约状态", () => {
 
     taroMocks.getStorageSync.mockReturnValue(auth);
     expect(getAuth()).toEqual(auth);
+  });
+
+  it("保存、读取并清除记住的登录信息", () => {
+    const login = {
+      organizationCode: "DEMO",
+      phone: "18603328161",
+    };
+    saveRememberedLogin(login);
+    expect(taroMocks.setStorageSync).toHaveBeenCalledWith(
+      "kebao.remembered-login",
+      login,
+    );
+
+    taroMocks.getStorageSync.mockReturnValue(login);
+    expect(getRememberedLogin()).toEqual(login);
+
+    clearRememberedLogin();
+    expect(taroMocks.removeStorageSync).toHaveBeenCalledWith(
+      "kebao.remembered-login",
+    );
   });
 
   it("保存预约时替换同 ID 旧记录并置顶", () => {

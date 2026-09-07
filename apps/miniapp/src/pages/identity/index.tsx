@@ -1,4 +1,4 @@
-import { Button, Input, Text, View } from "@tarojs/components";
+import { Button, Checkbox, Input, Label, Text, View } from "@tarojs/components";
 import Taro, { useDidShow } from "@tarojs/taro";
 import { useState } from "react";
 import {
@@ -7,7 +7,14 @@ import {
   type LoginUser,
 } from "../../api/auth";
 import { getErrorMessage } from "../../api/client";
-import { getIdentity, saveIdentity, type Identity } from "../../store/session";
+import {
+  clearRememberedLogin,
+  getIdentity,
+  getRememberedLogin,
+  saveIdentity,
+  saveRememberedLogin,
+  type Identity,
+} from "../../store/session";
 
 const IDENTITIES: Identity[] = [
   { role: "parent", id: "student-1", name: "林小满家长" },
@@ -35,6 +42,7 @@ export default function IdentityPage() {
   const [current, setCurrent] = useState<Identity | undefined>();
   const [organizationCode, setOrganizationCode] = useState("");
   const [phone, setPhone] = useState("");
+  const [rememberLogin, setRememberLogin] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const developmentIdentityEnabled =
@@ -42,7 +50,19 @@ export default function IdentityPage() {
   const demoPhoneLoginEnabled =
     process.env.TARO_APP_WECHAT_DEMO_PHONE_LOGIN_ENABLED === "true";
 
-  useDidShow(() => setCurrent(getIdentity()));
+  useDidShow(() => {
+    setCurrent(getIdentity());
+    const remembered = getRememberedLogin();
+    if (remembered) {
+      setOrganizationCode(remembered.organizationCode);
+      setPhone(remembered.phone);
+      setRememberLogin(true);
+    } else {
+      setOrganizationCode("");
+      setPhone("");
+      setRememberLogin(false);
+    }
+  });
 
   const choose = (identity: Identity) => {
     saveIdentity(identity);
@@ -52,7 +72,10 @@ export default function IdentityPage() {
     });
   };
 
-  const completeLogin = async (loginAction: () => Promise<LoginUser>) => {
+  const completeLogin = async (
+    loginAction: () => Promise<LoginUser>,
+    remember?: { organizationCode: string; phone: string },
+  ) => {
     setSubmitting(true);
     setError("");
     try {
@@ -63,6 +86,11 @@ export default function IdentityPage() {
         role: user.role === "TEACHER" ? "teacher" : "parent",
       };
       setCurrent(identity);
+      if (rememberLogin && remember) {
+        saveRememberedLogin(remember);
+      } else {
+        clearRememberedLogin();
+      }
       await Taro.navigateTo({
         url: identity.role === "parent" ? "/pages/parent/index" : "/pages/teacher/index",
       });
@@ -81,8 +109,14 @@ export default function IdentityPage() {
       setError("请输入后台预留的 11 位手机号");
       return;
     }
-    void completeLogin(() =>
-      loginWithWechatDemo(organizationCode.trim(), phone.trim()),
+    const normalizedOrganizationCode = organizationCode.trim();
+    const normalizedPhone = phone.trim();
+    void completeLogin(
+      () => loginWithWechatDemo(normalizedOrganizationCode, normalizedPhone),
+      {
+        organizationCode: normalizedOrganizationCode,
+        phone: normalizedPhone,
+      },
     );
   };
 
@@ -118,6 +152,20 @@ export default function IdentityPage() {
               onInput={(event) => setPhone(event.detail.value)}
             />
           </View>
+        ) : null}
+        {demoPhoneLoginEnabled ? (
+          <Label className="remember-login">
+            <Checkbox
+              value="remember"
+              checked={rememberLogin}
+              onChange={(event) => {
+                const checked = event.detail.value.length > 0;
+                setRememberLogin(checked);
+                if (!checked) clearRememberedLogin();
+              }}
+            />
+            <Text>记住登录信息</Text>
+          </Label>
         ) : null}
         {error ? <Text className="muted">{error}</Text> : null}
         {demoPhoneLoginEnabled ? (

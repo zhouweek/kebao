@@ -21,9 +21,15 @@ export interface AuthState {
   accessTokenExpiresIn: number;
 }
 
+export interface RememberedLogin {
+  organizationCode: string;
+  phone: string;
+}
+
 const IDENTITY_KEY = "kebao.identity";
 const BOOKINGS_KEY = "kebao.bookings";
 const AUTH_KEY = "kebao.auth";
+const REMEMBERED_LOGIN_KEY = "kebao.remembered-login";
 
 export function saveIdentity(identity: Identity): void {
   Taro.setStorageSync(IDENTITY_KEY, identity);
@@ -43,6 +49,18 @@ export function getAuth(): AuthState | undefined {
 
 export function clearAuth(): void {
   Taro.removeStorageSync(AUTH_KEY);
+}
+
+export function saveRememberedLogin(login: RememberedLogin): void {
+  Taro.setStorageSync(REMEMBERED_LOGIN_KEY, login);
+}
+
+export function getRememberedLogin(): RememberedLogin | undefined {
+  return Taro.getStorageSync<RememberedLogin>(REMEMBERED_LOGIN_KEY) || undefined;
+}
+
+export function clearRememberedLogin(): void {
+  Taro.removeStorageSync(REMEMBERED_LOGIN_KEY);
 }
 
 export function getSavedBookings(): SavedBooking[] {
