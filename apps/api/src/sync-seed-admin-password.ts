@@ -1,7 +1,7 @@
 import { PrismaClient } from "@prisma/client";
-import { hashPassword } from "./auth.js";
+import { hashPassword, verifyPassword } from "./auth.js";
 
-const password = process.env.SEED_ADMIN_PASSWORD;
+const password = process.env.SEED_ADMIN_PASSWORD?.trim();
 
 if (!password) {
   process.exit(0);
@@ -24,9 +24,9 @@ try {
   } else {
     const result = await prisma.user.updateMany({
       where: {
-        id: "admin-1",
         organizationId: organization.id,
         role: "ADMIN",
+        phone: "13800000001",
       },
       data: {
         passwordHash: await hashPassword(password),
@@ -36,6 +36,20 @@ try {
     if (result.count === 0) {
       console.info("初始管理员账号尚未初始化，跳过密码同步");
     } else {
+      const admin = await prisma.user.findFirst({
+        where: {
+          organizationId: organization.id,
+          role: "ADMIN",
+          phone: "13800000001",
+        },
+        select: { passwordHash: true },
+      });
+      if (
+        !admin?.passwordHash ||
+        !(await verifyPassword(password, admin.passwordHash))
+      ) {
+        throw new Error("初始管理员密码同步校验失败");
+      }
       console.info("初始管理员密码已与 SEED_ADMIN_PASSWORD 同步");
     }
   }
