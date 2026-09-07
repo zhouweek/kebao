@@ -418,6 +418,35 @@ export async function refreshAccessToken(
   return tokens;
 }
 
+let refreshInFlight: Promise<AuthTokens> | undefined;
+
+async function authenticatedFetch(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  fetcher: typeof fetch = fetch,
+): Promise<Response> {
+  const response = await fetcher(input, init);
+  if (response.status !== 401) return response;
+
+  const body = (await response.clone().json().catch(() => undefined)) as
+    | ApiErrorPayload
+    | undefined;
+  if (body?.error?.code !== "TOKEN_EXPIRED") return response;
+
+  refreshInFlight ??= refreshAccessToken(fetcher).finally(() => {
+    refreshInFlight = undefined;
+  });
+  try {
+    const tokens = await refreshInFlight;
+    const headers = new Headers(init.headers);
+    headers.set("Authorization", `Bearer ${tokens.accessToken}`);
+    return fetcher(input, { ...init, headers });
+  } catch (error) {
+    clearAuth();
+    throw error;
+  }
+}
+
 export async function logout(fetcher: typeof fetch = fetch): Promise<void> {
   try {
     await fetcher("/auth/logout", {
@@ -430,18 +459,18 @@ export async function logout(fetcher: typeof fetch = fetch): Promise<void> {
 }
 
 export async function getMe(fetcher: typeof fetch = fetch): Promise<AuthUser> {
-  const response = await fetcher("/auth/me", {
+  const response = await authenticatedFetch("/auth/me", {
     headers: { Accept: "application/json", ...authHeaders() },
-  });
+  }, fetcher);
   return parseResponse<AuthUser>(response);
 }
 
 export async function getSessions(
   fetcher: typeof fetch = fetch,
 ): Promise<CourseSession[]> {
-  const response = await fetcher("/sessions", {
+  const response = await authenticatedFetch("/sessions", {
     headers: { Accept: "application/json", ...authHeaders() },
-  });
+  }, fetcher);
   return parseResponse<CourseSession[]>(response);
 }
 
@@ -449,7 +478,7 @@ export async function createSession(
   input: CreateSessionInput,
   fetcher: typeof fetch = fetch,
 ): Promise<CourseSession> {
-  const response = await fetcher("/sessions", {
+  const response = await authenticatedFetch("/sessions", {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -457,7 +486,7 @@ export async function createSession(
       ...authHeaders(),
     },
     body: JSON.stringify(input),
-  });
+  }, fetcher);
   return parseResponse<CourseSession>(response);
 }
 
@@ -465,11 +494,11 @@ export async function previewSeries(
   input: CreateSeriesInput,
   fetcher: typeof fetch = fetch,
 ): Promise<SeriesResult> {
-  const response = await fetcher("/session-series/preflight", {
+  const response = await authenticatedFetch("/session-series/preflight", {
     method: "POST",
     headers: jsonHeaders(),
     body: JSON.stringify(input),
-  });
+  }, fetcher);
   return parseResponse<SeriesResult>(response);
 }
 
@@ -477,11 +506,11 @@ export async function createSeries(
   input: CreateSeriesInput,
   fetcher: typeof fetch = fetch,
 ): Promise<SeriesResult> {
-  const response = await fetcher("/session-series", {
+  const response = await authenticatedFetch("/session-series", {
     method: "POST",
     headers: jsonHeaders(),
     body: JSON.stringify(input),
-  });
+  }, fetcher);
   return parseResponse<SeriesResult>(response);
 }
 
@@ -497,9 +526,11 @@ export async function getAdminBookings(
   if (query.status) search.set("status", query.status);
   if (query.from) search.set("from", query.from);
   if (query.to) search.set("to", query.to);
-  const response = await fetcher(`/admin/bookings${search.size ? `?${search}` : ""}`, {
-    headers: { Accept: "application/json", ...authHeaders() },
-  });
+  const response = await authenticatedFetch(
+    `/admin/bookings${search.size ? `?${search}` : ""}`,
+    { headers: { Accept: "application/json", ...authHeaders() } },
+    fetcher,
+  );
   return parseResponse<AdminBookingPage>(response);
 }
 
@@ -508,11 +539,11 @@ export async function createAdminBooking(
   studentId: string,
   fetcher: typeof fetch = fetch,
 ): Promise<{ booking: Booking; alreadyBooked: boolean }> {
-  const response = await fetcher("/admin/bookings", {
+  const response = await authenticatedFetch("/admin/bookings", {
     method: "POST",
     headers: jsonHeaders(),
     body: JSON.stringify({ sessionId, studentId }),
-  });
+  }, fetcher);
   return parseResponse<{ booking: Booking; alreadyBooked: boolean }>(response);
 }
 
@@ -521,11 +552,11 @@ export async function cancelAdminBooking(
   reason: string,
   fetcher: typeof fetch = fetch,
 ): Promise<Booking> {
-  const response = await fetcher(`/admin/bookings/${bookingId}/cancel`, {
+  const response = await authenticatedFetch(`/admin/bookings/${bookingId}/cancel`, {
     method: "POST",
     headers: jsonHeaders(),
     body: JSON.stringify({ reason }),
-  });
+  }, fetcher);
   return parseResponse<Booking>(response);
 }
 
@@ -542,11 +573,11 @@ export async function rescheduleSession(
   input: RescheduleSessionInput,
   fetcher: typeof fetch = fetch,
 ): Promise<CourseSession | { sessions: CourseSession[] }> {
-  const response = await fetcher(`/sessions/${sessionId}/reschedule`, {
+  const response = await authenticatedFetch(`/sessions/${sessionId}/reschedule`, {
     method: "PATCH",
     headers: jsonHeaders(),
     body: JSON.stringify(input),
-  });
+  }, fetcher);
   return parseResponse<CourseSession | { sessions: CourseSession[] }>(response);
 }
 
@@ -556,11 +587,11 @@ export async function cancelSession(
   fetcher: typeof fetch = fetch,
   scope: "THIS" | "THIS_AND_FUTURE" = "THIS",
 ): Promise<CourseSession | { sessions: CourseSession[] }> {
-  const response = await fetcher(`/sessions/${sessionId}/cancel`, {
+  const response = await authenticatedFetch(`/sessions/${sessionId}/cancel`, {
     method: "POST",
     headers: jsonHeaders(),
     body: JSON.stringify(scope === "THIS" ? { reason } : { reason, scope }),
-  });
+  }, fetcher);
   return parseResponse<CourseSession | { sessions: CourseSession[] }>(response);
 }
 
@@ -568,9 +599,9 @@ export async function getRoster(
   sessionId: string,
   fetcher: typeof fetch = fetch,
 ): Promise<RosterStudent[]> {
-  const response = await fetcher(`/teacher/sessions/${sessionId}/roster`, {
+  const response = await authenticatedFetch(`/teacher/sessions/${sessionId}/roster`, {
     headers: { Accept: "application/json", ...authHeaders() },
-  });
+  }, fetcher);
   return parseResponse<RosterStudent[]>(response);
 }
 
@@ -579,11 +610,11 @@ export async function updateAttendance(
   records: Array<{ bookingId: string; status: AttendanceStatus }>,
   fetcher: typeof fetch = fetch,
 ): Promise<Booking[]> {
-  const response = await fetcher(`/sessions/${sessionId}/attendance`, {
+  const response = await authenticatedFetch(`/sessions/${sessionId}/attendance`, {
     method: "PUT",
     headers: jsonHeaders(),
     body: JSON.stringify({ records }),
-  });
+  }, fetcher);
   return parseResponse<Booking[]>(response);
 }
 
@@ -591,9 +622,11 @@ export async function getNotifications(
   unreadOnly = false,
   fetcher: typeof fetch = fetch,
 ): Promise<Notification[]> {
-  const response = await fetcher(`/notifications${unreadOnly ? "?unreadOnly=true" : ""}`, {
-    headers: { Accept: "application/json", ...authHeaders() },
-  });
+  const response = await authenticatedFetch(
+    `/notifications${unreadOnly ? "?unreadOnly=true" : ""}`,
+    { headers: { Accept: "application/json", ...authHeaders() } },
+    fetcher,
+  );
   return parseResponse<Notification[]>(response);
 }
 
@@ -601,19 +634,19 @@ export async function markNotificationRead(
   notificationId: string,
   fetcher: typeof fetch = fetch,
 ): Promise<Notification> {
-  const response = await fetcher(`/notifications/${notificationId}/read`, {
+  const response = await authenticatedFetch(`/notifications/${notificationId}/read`, {
     method: "PATCH",
     headers: { Accept: "application/json", ...authHeaders() },
-  });
+  }, fetcher);
   return parseResponse<Notification>(response);
 }
 
 export async function getNotificationDeliveries(
   fetcher: typeof fetch = fetch,
 ): Promise<NotificationDelivery[]> {
-  const response = await fetcher("/admin/notification-deliveries", {
+  const response = await authenticatedFetch("/admin/notification-deliveries", {
     headers: { Accept: "application/json", ...authHeaders() },
-  });
+  }, fetcher);
   return parseResponse<NotificationDelivery[]>(response);
 }
 
@@ -621,9 +654,10 @@ export async function resendNotificationDelivery(
   deliveryId: string,
   fetcher: typeof fetch = fetch,
 ): Promise<{ accepted: boolean }> {
-  const response = await fetcher(
+  const response = await authenticatedFetch(
     `/admin/notification-deliveries/${encodeURIComponent(deliveryId)}/resend`,
     { method: "POST", headers: jsonHeaders() },
+    fetcher,
   );
   return parseResponse<{ accepted: boolean }>(response);
 }
@@ -631,9 +665,9 @@ export async function resendNotificationDelivery(
 export async function getAuditLogs(
   fetcher: typeof fetch = fetch,
 ): Promise<AuditLog[]> {
-  const response = await fetcher("/audit-logs", {
+  const response = await authenticatedFetch("/audit-logs", {
     headers: { Accept: "application/json", ...authHeaders() },
-  });
+  }, fetcher);
   return parseResponse<AuditLog[]>(response);
 }
 
@@ -651,9 +685,9 @@ export async function getStatistics(
   filter: AnalyticsFilter = {},
   fetcher: typeof fetch = fetch,
 ): Promise<AnalyticsResult> {
-  const response = await fetcher(`/admin/statistics${analyticsSearch(filter)}`, {
+  const response = await authenticatedFetch(`/admin/statistics${analyticsSearch(filter)}`, {
     headers: { Accept: "application/json", ...authHeaders() },
-  });
+  }, fetcher);
   return parseResponse<AnalyticsResult>(response);
 }
 
@@ -661,9 +695,10 @@ export async function exportStatisticsCsv(
   filter: AnalyticsFilter = {},
   fetcher: typeof fetch = fetch,
 ): Promise<{ blob: Blob; filename: string }> {
-  const response = await fetcher(
+  const response = await authenticatedFetch(
     `/admin/statistics/export${analyticsSearch(filter)}`,
     { headers: { Accept: "text/csv", ...authHeaders() } },
+    fetcher,
   );
   if (!response.ok) {
     let message = "导出失败，请稍后重试";
@@ -700,9 +735,9 @@ export async function getMasterData(
   if (query.activeOnly !== undefined) search.set("activeOnly", String(query.activeOnly));
   if (query.campusId) search.set("campusId", query.campusId);
   const suffix = search.size ? `?${search}` : "";
-  const response = await fetcher(`/admin/${resource}${suffix}`, {
+  const response = await authenticatedFetch(`/admin/${resource}${suffix}`, {
     headers: { Accept: "application/json", ...authHeaders() },
-  });
+  }, fetcher);
   return parseResponse<MasterDataPage>(response);
 }
 
@@ -712,11 +747,11 @@ export async function saveMasterData(
   id?: string,
   fetcher: typeof fetch = fetch,
 ): Promise<MasterDataItem> {
-  const response = await fetcher(`/admin/${resource}${id ? `/${id}` : ""}`, {
+  const response = await authenticatedFetch(`/admin/${resource}${id ? `/${id}` : ""}`, {
     method: id ? "PATCH" : "POST",
     headers: jsonHeaders(),
     body: JSON.stringify(input),
-  });
+  }, fetcher);
   return parseResponse<MasterDataItem>(response);
 }
 
@@ -726,11 +761,11 @@ export async function setMasterDataActive(
   isActive: boolean,
   fetcher: typeof fetch = fetch,
 ): Promise<MasterDataItem> {
-  const response = await fetcher(`/admin/${resource}/${id}/status`, {
+  const response = await authenticatedFetch(`/admin/${resource}/${id}/status`, {
     method: "PATCH",
     headers: jsonHeaders(),
     body: JSON.stringify({ isActive }),
-  });
+  }, fetcher);
   return parseResponse<MasterDataItem>(response);
 }
 
@@ -739,10 +774,10 @@ export async function deleteMasterData(
   id: string,
   fetcher: typeof fetch = fetch,
 ): Promise<void> {
-  const response = await fetcher(`/admin/${resource}/${id}`, {
+  const response = await authenticatedFetch(`/admin/${resource}/${id}`, {
     method: "DELETE",
     headers: { Accept: "application/json", ...authHeaders() },
-  });
+  }, fetcher);
   if (!response.ok) await parseResponse<never>(response);
 }
 
@@ -751,10 +786,10 @@ export async function setStudentGuardians(
   guardians: Array<{ guardianId: string; relationship: string; isPrimary: boolean }>,
   fetcher: typeof fetch = fetch,
 ): Promise<MasterDataItem> {
-  const response = await fetcher(`/admin/students/${studentId}/guardians`, {
+  const response = await authenticatedFetch(`/admin/students/${studentId}/guardians`, {
     method: "PUT",
     headers: jsonHeaders(),
     body: JSON.stringify({ guardians }),
-  });
+  }, fetcher);
   return parseResponse<MasterDataItem>(response);
 }

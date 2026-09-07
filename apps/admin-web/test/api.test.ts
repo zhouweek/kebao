@@ -85,6 +85,47 @@ describe("sessions API client", () => {
     expect(result).toEqual([{ id: "session-1" }]);
   });
 
+  it("访问令牌过期后自动刷新并重试原请求", async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (input === "/auth/refresh") {
+        return new Response(
+          JSON.stringify({
+            data: {
+              accessToken: "new-access-token",
+              refreshToken: "new-refresh-token",
+              accessTokenExpiresIn: 900,
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (fetcher.mock.calls.filter(([url]) => url === "/sessions").length === 1) {
+        return new Response(
+          JSON.stringify({
+            error: { code: "TOKEN_EXPIRED", message: "访问令牌已过期" },
+          }),
+          { status: 401, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      expect(new Headers(init?.headers).get("Authorization")).toBe(
+        "Bearer new-access-token",
+      );
+      return new Response(JSON.stringify({ data: [{ id: "session-1" }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    await expect(getSessions(fetcher as typeof fetch)).resolves.toEqual([
+      { id: "session-1" },
+    ]);
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(JSON.parse(localStorage.getItem("kebao.admin.auth") ?? "{}")).toMatchObject({
+      accessToken: "new-access-token",
+      refreshToken: "new-refresh-token",
+    });
+  });
+
   it("构造管理员预约筛选并调用代预约、代取消接口", async () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL) =>
       new Response(JSON.stringify({
