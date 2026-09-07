@@ -313,6 +313,9 @@ function App() {
         );
       } else {
         localStorage.removeItem(LOGIN_CREDENTIALS_STORAGE_KEY);
+        setLoginOrganizationCode("");
+        setLoginPhone("");
+        setLoginPassword("");
       }
       setAuthenticated(true);
     } catch (error) {

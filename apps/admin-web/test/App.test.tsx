@@ -141,6 +141,59 @@ describe("管理后台", () => {
     expect(screen.getByRole("checkbox", { name: "记住上次登录信息" })).toBeChecked();
   });
 
+  it("未勾选记住信息时登录后清空三个输入项", async () => {
+    localStorage.clear();
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      if (input === "/auth/logout") {
+        return new Response(null, { status: 204 });
+      }
+      return new Response(
+        JSON.stringify(
+          input === "/auth/admin/login"
+            ? {
+                data: {
+                  accessToken: "new-access",
+                  refreshToken: "new-refresh",
+                  accessTokenExpiresIn: 900,
+                  user: {
+                    id: "admin-1",
+                    organizationId: "org-development",
+                    role: "ADMIN",
+                    name: "管理员",
+                    phone: "13800000001",
+                  },
+                },
+              }
+            : { data: [session] },
+        ),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+    vi.stubGlobal("fetch", fetcher);
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText("机构编码"), {
+      target: { value: "DEMO" },
+    });
+    fireEvent.change(screen.getByLabelText("手机号"), {
+      target: { value: "13800000001" },
+    });
+    fireEvent.change(screen.getByLabelText("密码"), {
+      target: { value: "Admin123!" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "登录" }));
+    await screen.findByText("少儿编程 L2");
+    fireEvent.click(screen.getByRole("button", { name: "退出登录" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "管理员登录" })).toBeInTheDocument(),
+    );
+    expect(screen.getByLabelText("机构编码")).toHaveValue("");
+    expect(screen.getByLabelText("手机号")).toHaveValue("");
+    expect(screen.getByLabelText("密码")).toHaveValue("");
+    expect(localStorage.getItem("kebao.admin.login-credentials")).toBeNull();
+  });
+
   it("未登录时展示手机号密码登录并在成功后加载课次", async () => {
     localStorage.clear();
     const fetcher = vi.fn(async (input: RequestInfo | URL) =>
