@@ -38,11 +38,13 @@ import {
 import { MasterDataView } from "./MasterDataView";
 import { BookingManagementView } from "./BookingManagementView";
 import { AnalyticsView } from "./AnalyticsView";
+import { CoursePackagePrototype } from "./CoursePackagePrototype";
 
 type View =
   | "overview"
   | "sessions"
   | "bookings"
+  | "course-packages"
   | "analytics"
   | "notifications"
   | "deliveries"
@@ -747,6 +749,15 @@ function App() {
             预约管理
           </button>
           <button
+            className={view === "course-packages" ? "nav-item active" : "nav-item"}
+            onClick={() => changeView("course-packages")}
+          >
+            <Icon>
+              <path d="M4 6h16v13H4zM8 6V4h8v2M4 10h16M9 14h6" />
+            </Icon>
+            课包管理
+          </button>
+          <button
             className={view === "analytics" ? "nav-item active" : "nav-item"}
             onClick={() => changeView("analytics")}
           >
@@ -814,7 +825,7 @@ function App() {
         <header className="topbar">
           <div>
             <p className="eyebrow">教学运营中心</p>
-            <h1>{view === "overview" ? `上午好，${authUser?.name ?? "管理员"}` : view === "sessions" ? "课次管理" : view === "bookings" ? "预约管理" : view === "analytics" ? "经营统计" : view === "notifications" ? "站内通知" : view === "deliveries" ? "通知投递" : view === "audit" ? "审计日志" : masterLabels[view]}</h1>
+            <h1>{view === "overview" ? `上午好，${authUser?.name ?? "管理员"}` : view === "sessions" ? "课次管理" : view === "bookings" ? "预约管理" : view === "course-packages" ? "课包管理" : view === "analytics" ? "经营统计" : view === "notifications" ? "站内通知" : view === "deliveries" ? "通知投递" : view === "audit" ? "审计日志" : masterLabels[view]}</h1>
           </div>
           {(view === "overview" || view === "sessions") && <button className="primary-button" onClick={openCreate}>
             <Icon size={18}><path d="M12 5v14M5 12h14" /></Icon>
@@ -880,6 +891,8 @@ function App() {
             sessions={sessions}
             students={masterLookups.students}
           />
+        ) : view === "course-packages" ? (
+          <CoursePackagePrototype />
         ) : view === "analytics" ? (
           <AnalyticsView
             campuses={masterLookups.campuses}

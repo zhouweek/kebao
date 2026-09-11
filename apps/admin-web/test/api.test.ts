@@ -4,19 +4,28 @@ import {
   cancelSession,
   clearAuth,
   createAdminBooking,
+  createCoursePackage,
+  createCoursePackagePurchase,
   createSession,
   createSeries,
+  extendStudentEntitlement,
   getAdminBookings,
   getAuditLogs,
+  getCoursePackages,
+  getEntitlementLedger,
+  getEntitlementValidityChanges,
   getNotifications,
   getNotificationDeliveries,
   getRoster,
   getSessions,
+  getStudentEntitlements,
   loginAdmin,
   markNotificationRead,
   previewSeries,
   rescheduleSession,
   resendNotificationDelivery,
+  setCoursePackageStatus,
+  updateCoursePackage,
   updateAttendance,
 } from "../src/api";
 
@@ -63,6 +72,132 @@ describe("sessions API client", () => {
     expect(fetcher).toHaveBeenLastCalledWith(
       "/admin/notification-deliveries/delivery%2F1/resend",
       expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("调用课包列表、创建、编辑和状态接口", async () => {
+    const fetcher = vi.fn(async () =>
+      new Response(JSON.stringify({ data: { items: [], page: 1, pageSize: 20, total: 0 } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const input = {
+      courseId: "course-1",
+      name: "编程课包",
+      creditCount: 20,
+      validityMonths: 6,
+      priceCents: 199900,
+      absentDeductsCredit: false,
+      lateCancellationDeductsCredit: false,
+      status: "DRAFT" as const,
+    };
+
+    await getCoursePackages(
+      { page: 2, pageSize: 10, keyword: "编程", status: "ACTIVE", courseId: "course-1" },
+      fetcher as typeof fetch,
+    );
+    await createCoursePackage(input, fetcher as typeof fetch);
+    await updateCoursePackage("package/1", { name: "新名称" }, fetcher as typeof fetch);
+    await setCoursePackageStatus("package/1", "INACTIVE", fetcher as typeof fetch);
+
+    expect(fetcher).toHaveBeenNthCalledWith(
+      1,
+      "/admin/course-packages?page=2&pageSize=10&keyword=%E7%BC%96%E7%A8%8B&status=ACTIVE&courseId=course-1",
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: "Bearer access-token" }) }),
+    );
+    expect(fetcher).toHaveBeenNthCalledWith(
+      2,
+      "/admin/course-packages",
+      expect.objectContaining({ method: "POST", body: JSON.stringify(input) }),
+    );
+    expect(fetcher).toHaveBeenNthCalledWith(
+      3,
+      "/admin/course-packages/package%2F1",
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify({ name: "新名称" }) }),
+    );
+    expect(fetcher).toHaveBeenNthCalledWith(
+      4,
+      "/admin/course-packages/package%2F1/status",
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify({ status: "INACTIVE" }) }),
+    );
+  });
+
+  it("调用购买、权益、流水、延期和变更记录接口", async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL) =>
+      new Response(JSON.stringify({
+        data: String(input).includes("/ledger") || String(input).includes("/validity-changes")
+          ? { items: [], page: 2, pageSize: 10, total: 0 }
+          : String(input) === "/admin/course-package-purchases"
+            ? { purchase: { id: "purchase-1" }, entitlement: { id: "entitlement-1" }, alreadyPurchased: false }
+            : String(input).includes("/extensions")
+              ? { id: "entitlement-1", version: 2 }
+              : { items: [], page: 1, pageSize: 20, total: 0 },
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const purchase = {
+      packageId: "package-1",
+      studentId: "student-1",
+      paidAmountCents: 199900,
+      note: "线下录入",
+      idempotencyKey: "purchase-key-1",
+    };
+
+    await createCoursePackagePurchase(purchase, fetcher as typeof fetch);
+    await getStudentEntitlements(
+      { pageSize: 100, studentId: "student-1" },
+      fetcher as typeof fetch,
+    );
+    await getEntitlementLedger(
+      "entitlement/1",
+      { page: 2, pageSize: 10, keyword: "消课 备注" },
+      fetcher as typeof fetch,
+    );
+    await extendStudentEntitlement(
+      "entitlement/1",
+      { months: 2, reason: "停课补偿", version: 1 },
+      fetcher as typeof fetch,
+    );
+    await getEntitlementValidityChanges(
+      "entitlement/1",
+      { page: 2, pageSize: 10, keyword: "停课补偿" },
+      fetcher as typeof fetch,
+    );
+
+    expect(fetcher).toHaveBeenNthCalledWith(
+      1,
+      "/admin/course-package-purchases",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "Idempotency-Key": "purchase-key-1" }),
+        body: JSON.stringify(purchase),
+      }),
+    );
+    expect(fetcher).toHaveBeenNthCalledWith(
+      2,
+      "/admin/student-entitlements?pageSize=100&studentId=student-1",
+      expect.anything(),
+    );
+    expect(fetcher).toHaveBeenNthCalledWith(
+      3,
+      "/admin/student-entitlements/entitlement%2F1/ledger?page=2&pageSize=10&keyword=%E6%B6%88%E8%AF%BE+%E5%A4%87%E6%B3%A8",
+      expect.anything(),
+    );
+    expect(fetcher).toHaveBeenNthCalledWith(
+      4,
+      "/admin/student-entitlements/entitlement%2F1/extensions",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ months: 2, reason: "停课补偿", version: 1 }),
+      }),
+    );
+    expect(fetcher).toHaveBeenNthCalledWith(
+      5,
+      "/admin/student-entitlements/entitlement%2F1/validity-changes?page=2&pageSize=10&keyword=%E5%81%9C%E8%AF%BE%E8%A1%A5%E5%81%BF",
+      expect.anything(),
     );
   });
 

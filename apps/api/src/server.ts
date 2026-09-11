@@ -6,6 +6,7 @@ import { createDevelopmentSeed } from "./seed.js";
 import {
   NotificationWorker,
   parseWechatTemplateConfig,
+  runNotificationWorkerStages,
 } from "./notification-worker.js";
 import { WechatApi } from "./wechat.js";
 import { loadRuntimeConfig } from "./production-config.js";
@@ -77,10 +78,9 @@ const runNotificationWorker = async () => {
   if (workerRunning) return;
   workerRunning = true;
   try {
-    await notificationWorker.enqueueReminders();
-    await notificationWorker.processBatch();
-  } catch (error) {
-    app.log.error(error, "通知 worker 执行失败");
+    await runNotificationWorkerStages(notificationWorker, (error, stageName) => {
+      app.log.error(error, `${stageName}执行失败`);
+    });
   } finally {
     workerRunning = false;
   }

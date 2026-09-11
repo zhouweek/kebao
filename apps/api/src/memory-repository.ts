@@ -30,6 +30,23 @@ import type {
   MasterDataQuery,
   MasterResource,
 } from "./master-data.js";
+import type {
+  CoursePackage,
+  CoursePackageListItem,
+  CoursePurchase,
+  CoursePurchaseListItem,
+  CreditLedger,
+  CreditReservation,
+  EntitlementValidityChange,
+  EntitlementListItem,
+  Page,
+  PageQuery,
+  StudentCourseEntitlement,
+} from "./course-packages.js";
+import {
+  coursePackagePageOffset,
+  creditLedgerTypesMatchingKeyword,
+} from "./course-packages.js";
 
 type TenantItem<T> = T & { organizationId?: string };
 
@@ -58,6 +75,12 @@ export interface MemorySeed {
   auditLogs?: Array<TenantItem<AuditLog>>;
   series?: Array<TenantItem<ScheduleSeries>>;
   masterData?: Partial<Record<MasterResource, Array<TenantItem<MasterDataItem>>>>;
+  coursePackages?: Array<TenantItem<CoursePackage>>;
+  coursePurchases?: Array<TenantItem<CoursePurchase>>;
+  studentEntitlements?: Array<TenantItem<StudentCourseEntitlement>>;
+  creditLedgers?: Array<TenantItem<CreditLedger>>;
+  creditReservations?: Array<TenantItem<CreditReservation>>;
+  entitlementValidityChanges?: Array<TenantItem<EntitlementValidityChange>>;
 }
 
 /**
@@ -82,6 +105,15 @@ export class MemoryRepository implements Repository, PlatformRepository {
   private readonly auditLogs = new Map<string, TenantItem<AuditLog>>();
   private readonly series = new Map<string, TenantItem<ScheduleSeries>>();
   private readonly masterData = new Map<string, TenantItem<MasterDataItem> & { resource: MasterResource }>();
+  private readonly coursePackages = new Map<string, TenantItem<CoursePackage>>();
+  private readonly coursePurchases = new Map<string, TenantItem<CoursePurchase>>();
+  private readonly studentEntitlements = new Map<string, TenantItem<StudentCourseEntitlement>>();
+  private readonly creditLedgers = new Map<string, TenantItem<CreditLedger>>();
+  private readonly creditReservations = new Map<string, TenantItem<CreditReservation>>();
+  private readonly entitlementValidityChanges = new Map<
+    string,
+    TenantItem<EntitlementValidityChange>
+  >();
   private readonly lockTails = new Map<string, Promise<void>>();
   private readonly transactions = new AsyncLocalStorage<boolean>();
   private transactionTail: Promise<void> = Promise.resolve();
@@ -156,6 +188,48 @@ export class MemoryRepository implements Repository, PlatformRepository {
     >) {
       items.forEach((item) => this.saveMasterSeed(resource, item));
     }
+    seed.coursePackages?.forEach((item) =>
+      this.coursePackages.set(
+        this.key(item.organizationId, item.id),
+        structuredClone({ ...item, organizationId: item.organizationId ?? "org-development" }),
+      ),
+    );
+    seed.coursePurchases?.forEach((item) =>
+      this.coursePurchases.set(
+        this.key(item.organizationId, item.id),
+        structuredClone({ ...item, organizationId: item.organizationId ?? "org-development" }),
+      ),
+    );
+    seed.studentEntitlements?.forEach((item) =>
+      this.studentEntitlements.set(
+        this.key(item.organizationId, item.id),
+        structuredClone({ ...item, organizationId: item.organizationId ?? "org-development" }),
+      ),
+    );
+    seed.creditLedgers?.forEach((item) =>
+      this.creditLedgers.set(
+        this.key(item.organizationId, item.id),
+        structuredClone({ ...item, organizationId: item.organizationId ?? "org-development" }),
+      ),
+    );
+    seed.creditReservations?.forEach((item) =>
+      this.creditReservations.set(
+        this.key(item.organizationId, item.id),
+        structuredClone({
+          ...item,
+          settlementAttemptCount: item.settlementAttemptCount ?? 0,
+          nextSettlementAttemptAt: item.nextSettlementAttemptAt ?? null,
+          settlementLastError: item.settlementLastError ?? null,
+          organizationId: item.organizationId ?? "org-development",
+        }),
+      ),
+    );
+    seed.entitlementValidityChanges?.forEach((item) =>
+      this.entitlementValidityChanges.set(
+        this.key(item.organizationId, item.id),
+        structuredClone({ ...item, organizationId: item.organizationId ?? "org-development" }),
+      ),
+    );
     seed.users?.forEach((user) => {
       if (user.role !== "ADMIN") {
         const now = new Date();
@@ -771,6 +845,413 @@ export class MemoryRepository implements Repository, PlatformRepository {
     return this.cleanMaster(updated);
   }
 
+  async listCoursePackages(
+    organizationId: string,
+    query: PageQuery,
+  ): Promise<Page<CoursePackageListItem>> {
+    let items = [...this.coursePackages.values()]
+      .filter((item) => item.organizationId === organizationId)
+      .map((item) => this.coursePackageListItem(organizationId, item));
+    if (query.courseId) items = items.filter((item) => item.courseId === query.courseId);
+    if (query.status) items = items.filter((item) => item.status === query.status);
+    if (query.keyword) {
+      const keyword = query.keyword.toLocaleLowerCase();
+      items = items.filter((item) =>
+        [item.name, item.courseName, item.description]
+          .some((value) => value?.toLocaleLowerCase().includes(keyword)),
+      );
+    }
+    items.sort(
+      (left, right) =>
+        right.createdAt.getTime() - left.createdAt.getTime() ||
+        right.id.localeCompare(left.id),
+    );
+    return this.page(items, query);
+  }
+
+  async getCoursePackage(
+    organizationId: string,
+    id: string,
+  ): Promise<CoursePackageListItem | undefined> {
+    const item = this.coursePackages.get(this.key(organizationId, id));
+    return item ? this.coursePackageListItem(organizationId, item) : undefined;
+  }
+
+  async saveCoursePackage(
+    organizationId: string,
+    item: CoursePackage,
+    expectedVersion?: number,
+  ): Promise<boolean> {
+    const duplicate = [...this.coursePackages.values()].some(
+      (candidate) =>
+        candidate.organizationId === organizationId &&
+        candidate.id !== item.id &&
+        candidate.name === item.name,
+    );
+    if (duplicate) throw new DomainError("COURSE_PACKAGE_DUPLICATE", "课包名称已存在", 409);
+    const key = this.key(organizationId, item.id);
+    const current = this.coursePackages.get(key);
+    if (expectedVersion !== undefined && current?.version !== expectedVersion) {
+      return false;
+    }
+    if (expectedVersion === undefined && current) {
+      return false;
+    }
+    this.coursePackages.set(
+      key,
+      structuredClone({ ...item, organizationId }),
+    );
+    return true;
+  }
+
+  async findCoursePurchaseByIdempotencyKey(
+    organizationId: string,
+    idempotencyKey: string,
+  ): Promise<CoursePurchaseListItem | undefined> {
+    const item = [...this.coursePurchases.values()].find(
+      (candidate) =>
+        candidate.organizationId === organizationId &&
+        candidate.idempotencyKey === idempotencyKey,
+    );
+    if (!item) return undefined;
+    const result = this.coursePurchaseListItem(organizationId, item);
+    return result.entitlementId ? result : undefined;
+  }
+
+  async listCoursePurchases(
+    organizationId: string,
+    query: PageQuery,
+  ): Promise<Page<CoursePurchaseListItem>> {
+    let items = [...this.coursePurchases.values()]
+      .filter((item) => item.organizationId === organizationId)
+      .map((item) => this.coursePurchaseListItem(organizationId, item))
+      .filter((item) => item.entitlementId !== "");
+    if (query.studentId) items = items.filter((item) => item.studentId === query.studentId);
+    if (query.courseId) items = items.filter((item) => item.courseId === query.courseId);
+    if (query.status) items = items.filter((item) => item.status === query.status);
+    if (query.keyword) {
+      const keyword = query.keyword.toLocaleLowerCase();
+      items = items.filter((item) =>
+        [item.studentName, item.packageNameSnapshot, item.courseNameSnapshot]
+          .some((value) => value.toLocaleLowerCase().includes(keyword)),
+      );
+    }
+    items.sort(
+      (left, right) =>
+        right.purchasedAt.getTime() - left.purchasedAt.getTime() ||
+        right.id.localeCompare(left.id),
+    );
+    return this.page(items, query);
+  }
+
+  async saveCoursePurchase(organizationId: string, item: CoursePurchase): Promise<void> {
+    const duplicate = [...this.coursePurchases.values()].some(
+      (candidate) =>
+        candidate.organizationId === organizationId &&
+        candidate.idempotencyKey === item.idempotencyKey &&
+        candidate.id !== item.id,
+    );
+    if (duplicate) {
+      throw new DomainError("IDEMPOTENCY_KEY_CONFLICT", "幂等键已用于其他购买请求", 409);
+    }
+    this.coursePurchases.set(
+      this.key(organizationId, item.id),
+      structuredClone({ ...item, organizationId }),
+    );
+  }
+
+  async listStudentEntitlements(
+    organizationId: string,
+    query: PageQuery,
+  ): Promise<Page<EntitlementListItem>> {
+    let items = [...this.studentEntitlements.values()]
+      .filter((item) => item.organizationId === organizationId)
+      .map((item) => this.entitlementListItem(organizationId, item));
+    if (query.studentId) items = items.filter((item) => item.studentId === query.studentId);
+    if (query.courseId) items = items.filter((item) => item.courseId === query.courseId);
+    if (query.status) items = items.filter((item) => item.status === query.status);
+    if (query.keyword) {
+      const keyword = query.keyword.toLocaleLowerCase();
+      items = items.filter((item) =>
+        [item.studentName, item.packageName, item.courseName]
+          .some((value) => value.toLocaleLowerCase().includes(keyword)),
+      );
+    }
+    items.sort(
+      (left, right) =>
+        right.createdAt.getTime() - left.createdAt.getTime() ||
+        right.id.localeCompare(left.id),
+    );
+    return this.page(items, query);
+  }
+
+  async getStudentEntitlement(
+    organizationId: string,
+    id: string,
+  ): Promise<EntitlementListItem | undefined> {
+    const item = this.studentEntitlements.get(this.key(organizationId, id));
+    return item ? this.entitlementListItem(organizationId, item) : undefined;
+  }
+
+  async saveStudentEntitlement(
+    organizationId: string,
+    item: StudentCourseEntitlement,
+    expectedVersion?: number,
+  ): Promise<boolean> {
+    const key = this.key(organizationId, item.id);
+    const current = this.studentEntitlements.get(key);
+    if (expectedVersion !== undefined && current?.version !== expectedVersion) return false;
+    if (expectedVersion === undefined && current) return false;
+    this.studentEntitlements.set(
+      key,
+      structuredClone({ ...item, organizationId }),
+    );
+    return true;
+  }
+
+  async listUsableStudentEntitlements(
+    organizationId: string,
+    studentId: string,
+    courseId: string,
+    businessDate: Date,
+  ): Promise<StudentCourseEntitlement[]> {
+    return [...this.studentEntitlements.values()]
+      .filter(
+        (item) =>
+          item.organizationId === organizationId &&
+          item.studentId === studentId &&
+          item.courseId === courseId &&
+          item.status === "ACTIVE" &&
+          item.validFrom <= businessDate &&
+          item.validUntil >= businessDate &&
+          item.remainingCredits > item.reservedCredits,
+      )
+      .sort(
+        (left, right) =>
+          left.validUntil.getTime() - right.validUntil.getTime() ||
+          left.createdAt.getTime() - right.createdAt.getTime() ||
+          left.id.localeCompare(right.id),
+      )
+      .map((item) => this.withoutTenant(item)!);
+  }
+
+  async getCoursePurchase(
+    organizationId: string,
+    id: string,
+  ): Promise<CoursePurchase | undefined> {
+    return this.withoutTenant(this.coursePurchases.get(this.key(organizationId, id)));
+  }
+
+  async getCreditReservationByBooking(
+    organizationId: string,
+    bookingId: string,
+  ): Promise<CreditReservation | undefined> {
+    const item = [...this.creditReservations.values()].find(
+      (candidate) =>
+        candidate.organizationId === organizationId && candidate.bookingId === bookingId,
+    );
+    return this.withoutTenant(item);
+  }
+
+  async listExpiredCreditReservations(
+    organizationId: string,
+    expiresAt: Date,
+    limit: number,
+    excludedReservationIds: readonly string[] = [],
+  ): Promise<CreditReservation[]> {
+    const excludedIds = new Set(excludedReservationIds);
+    return [...this.creditReservations.values()]
+      .filter(
+        (item) => {
+          if (
+            item.organizationId !== organizationId ||
+            excludedIds.has(item.id) ||
+            item.status !== "RESERVED" ||
+            item.expiresAt === null ||
+            item.expiresAt > expiresAt ||
+            (item.nextSettlementAttemptAt !== null &&
+              item.nextSettlementAttemptAt > expiresAt)
+          ) {
+            return false;
+          }
+          const booking = this.bookings.get(this.key(organizationId, item.bookingId));
+          const session = booking
+            ? this.sessions.get(this.key(organizationId, booking.sessionId))
+            : undefined;
+          return booking?.status === "CONFIRMED" && Boolean(session && session.endsAt <= expiresAt);
+        },
+      )
+      .sort(
+        (left, right) =>
+          left.expiresAt!.getTime() - right.expiresAt!.getTime() ||
+          left.id.localeCompare(right.id),
+      )
+      .slice(0, limit)
+      .map((item) => this.withoutTenant(item)!);
+  }
+
+  async saveCreditReservation(
+    organizationId: string,
+    item: CreditReservation,
+  ): Promise<void> {
+    const key = this.key(organizationId, item.id);
+    const current = this.creditReservations.get(key);
+    this.creditReservations.set(
+      key,
+      structuredClone({
+        ...item,
+        entitlementId: current?.entitlementId ?? item.entitlementId,
+        organizationId,
+      }),
+    );
+  }
+
+  async saveCreditReservationSettlementFailure(
+    organizationId: string,
+    item: Pick<
+      CreditReservation,
+      | "id"
+      | "settlementAttemptCount"
+      | "nextSettlementAttemptAt"
+      | "settlementLastError"
+      | "updatedAt"
+    >,
+    expectedAttemptCount: number,
+  ): Promise<boolean> {
+    const key = this.key(organizationId, item.id);
+    const current = this.creditReservations.get(key);
+    if (
+      !current ||
+      current.status !== "RESERVED" ||
+      current.settlementAttemptCount !== expectedAttemptCount
+    ) {
+      return false;
+    }
+    this.creditReservations.set(key, structuredClone({ ...current, ...item, organizationId }));
+    return true;
+  }
+
+  async expireStudentEntitlements(
+    organizationId: string,
+    businessDate: Date,
+    updatedAt: Date,
+  ): Promise<void> {
+    for (const [key, item] of this.studentEntitlements) {
+      if (
+        item.organizationId === organizationId &&
+        item.status === "ACTIVE" &&
+        item.validUntil < businessDate
+      ) {
+        this.studentEntitlements.set(key, {
+          ...item,
+          status: "EXPIRED",
+          version: item.version + 1,
+          updatedAt,
+        });
+      }
+    }
+  }
+
+  async listCreditLedgers(
+    organizationId: string,
+    entitlementId: string,
+  ): Promise<CreditLedger[]> {
+    return this.creditLedgerItems(organizationId, entitlementId);
+  }
+
+  async listCreditLedgerPage(
+    organizationId: string,
+    entitlementId: string,
+    query: PageQuery,
+  ): Promise<Page<CreditLedger>> {
+    const keyword = query.keyword?.trim().toLocaleLowerCase();
+    const matchingTypes = keyword ? creditLedgerTypesMatchingKeyword(keyword) : [];
+    const items = this.creditLedgerItems(organizationId, entitlementId).filter(
+      (item) =>
+        !keyword ||
+        matchingTypes.includes(item.type) ||
+        item.note?.toLocaleLowerCase().includes(keyword) ||
+        item.actorId.toLocaleLowerCase().includes(keyword),
+    );
+    return this.page(items, query);
+  }
+
+  private creditLedgerItems(
+    organizationId: string,
+    entitlementId: string,
+  ): CreditLedger[] {
+    return [...this.creditLedgers.values()]
+      .filter(
+        (item) =>
+          item.organizationId === organizationId && item.entitlementId === entitlementId,
+      )
+      .sort(
+        (left, right) =>
+          right.occurredAt.getTime() - left.occurredAt.getTime() ||
+          right.id.localeCompare(left.id),
+      )
+      .map((item) => this.withoutTenant(item)!);
+  }
+
+  async listBookingCreditLedgers(
+    organizationId: string,
+    bookingId: string,
+  ): Promise<CreditLedger[]> {
+    return [...this.creditLedgers.values()]
+      .filter(
+        (item) => item.organizationId === organizationId && item.bookingId === bookingId,
+      )
+      .sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime())
+      .map((item) => this.withoutTenant(item)!);
+  }
+
+  async saveCreditLedger(organizationId: string, item: CreditLedger): Promise<void> {
+    const duplicate = [...this.creditLedgers.values()].some(
+      (candidate) =>
+        candidate.organizationId === organizationId &&
+        candidate.idempotencyKey === item.idempotencyKey,
+    );
+    if (duplicate) {
+      throw new DomainError("LEDGER_IDEMPOTENCY_CONFLICT", "流水幂等键已存在", 409);
+    }
+    this.creditLedgers.set(
+      this.key(organizationId, item.id),
+      structuredClone({ ...item, organizationId }),
+    );
+  }
+
+  async listEntitlementValidityChanges(
+    organizationId: string,
+    entitlementId: string,
+    query: PageQuery,
+  ): Promise<Page<EntitlementValidityChange>> {
+    const keyword = query.keyword?.trim().toLocaleLowerCase();
+    const items = [...this.entitlementValidityChanges.values()]
+      .filter(
+        (item) =>
+          item.organizationId === organizationId &&
+          item.entitlementId === entitlementId &&
+          (!keyword || item.reason.toLocaleLowerCase().includes(keyword)),
+      )
+      .sort(
+        (left, right) =>
+          right.createdAt.getTime() - left.createdAt.getTime() ||
+          right.id.localeCompare(left.id),
+      )
+      .map((item) => this.withoutTenant(item)!);
+    return this.page(items, query);
+  }
+
+  async saveEntitlementValidityChange(
+    organizationId: string,
+    item: EntitlementValidityChange,
+  ): Promise<void> {
+    this.entitlementValidityChanges.set(
+      this.key(organizationId, item.id),
+      structuredClone({ ...item, organizationId }),
+    );
+  }
+
   async listSessions(
     organizationId: string,
     filter: SessionFilter,
@@ -802,6 +1283,17 @@ export class MemoryRepository implements Repository, PlatformRepository {
       this.key(organizationId, session.id),
       structuredClone({ ...session, organizationId }),
     );
+    for (const [key, reservation] of this.creditReservations) {
+      if (reservation.organizationId !== organizationId || reservation.status !== "RESERVED") {
+        continue;
+      }
+      const booking = this.bookings.get(this.key(organizationId, reservation.bookingId));
+      if (booking?.sessionId !== session.id) continue;
+      this.creditReservations.set(key, {
+        ...reservation,
+        expiresAt: session.endsAt,
+      });
+    }
   }
 
   async getSeries(
@@ -839,6 +1331,11 @@ export class MemoryRepository implements Repository, PlatformRepository {
   async listBookings(organizationId: string): Promise<Booking[]> {
     return [...this.bookings.values()]
       .filter((item) => (item.organizationId ?? "org-development") === organizationId)
+      .sort(
+        (a, b) =>
+          b.createdAt.getTime() - a.createdAt.getTime() ||
+          b.id.localeCompare(a.id),
+      )
       .map((item) => this.withoutTenant(item)!);
   }
 
@@ -858,7 +1355,11 @@ export class MemoryRepository implements Repository, PlatformRepository {
         if (filter.to && session.startsAt >= filter.to) return false;
         return true;
       })
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .sort(
+        (a, b) =>
+          b.createdAt.getTime() - a.createdAt.getTime() ||
+          b.id.localeCompare(a.id),
+      )
       .flatMap((booking) => {
         const session = this.sessions.get(this.key(organizationId, booking.sessionId));
         const student = this.students.get(this.key(organizationId, booking.studentId));
@@ -1146,6 +1647,12 @@ export class MemoryRepository implements Repository, PlatformRepository {
       notificationDeliveries: structuredClone(this.notificationDeliveries),
       auditLogs: structuredClone(this.auditLogs),
       masterData: structuredClone(this.masterData),
+      coursePackages: structuredClone(this.coursePackages),
+      coursePurchases: structuredClone(this.coursePurchases),
+      studentEntitlements: structuredClone(this.studentEntitlements),
+      creditLedgers: structuredClone(this.creditLedgers),
+      creditReservations: structuredClone(this.creditReservations),
+      entitlementValidityChanges: structuredClone(this.entitlementValidityChanges),
     };
     try {
       return await this.transactions.run(true, action);
@@ -1167,6 +1674,15 @@ export class MemoryRepository implements Repository, PlatformRepository {
       this.restoreMap(this.notificationDeliveries, snapshots.notificationDeliveries);
       this.restoreMap(this.auditLogs, snapshots.auditLogs);
       this.restoreMap(this.masterData, snapshots.masterData);
+      this.restoreMap(this.coursePackages, snapshots.coursePackages);
+      this.restoreMap(this.coursePurchases, snapshots.coursePurchases);
+      this.restoreMap(this.studentEntitlements, snapshots.studentEntitlements);
+      this.restoreMap(this.creditLedgers, snapshots.creditLedgers);
+      this.restoreMap(this.creditReservations, snapshots.creditReservations);
+      this.restoreMap(
+        this.entitlementValidityChanges,
+        snapshots.entitlementValidityChanges,
+      );
       throw error;
     } finally {
       release();
@@ -1175,6 +1691,70 @@ export class MemoryRepository implements Repository, PlatformRepository {
 
   private key(organizationId: string | undefined, id: string): string {
     return `${organizationId ?? "org-development"}:${id}`;
+  }
+
+  private page<T>(items: T[], query: PageQuery): Page<T> {
+    const start = coursePackagePageOffset(query);
+    return {
+      items: start >= items.length ? [] : items.slice(start, start + query.pageSize),
+      page: query.page,
+      pageSize: query.pageSize,
+      total: items.length,
+    };
+  }
+
+  private coursePackageListItem(
+    organizationId: string,
+    item: TenantItem<CoursePackage>,
+  ): CoursePackageListItem {
+    const course = this.masterData.get(
+      this.masterKey(organizationId, "courses", item.courseId),
+    );
+    const soldCount = [...this.coursePurchases.values()].filter(
+      (purchase) =>
+        purchase.organizationId === organizationId &&
+        purchase.packageId === item.id &&
+        purchase.status === "PAID",
+    ).length;
+    return {
+      ...this.withoutTenant(item)!,
+      courseName: course?.name ?? "",
+      soldCount,
+    };
+  }
+
+  private coursePurchaseListItem(
+    organizationId: string,
+    item: TenantItem<CoursePurchase>,
+  ): CoursePurchaseListItem {
+    const student = this.masterData.get(
+      this.masterKey(organizationId, "students", item.studentId),
+    );
+    const entitlement = [...this.studentEntitlements.values()].find(
+      (candidate) =>
+        candidate.organizationId === organizationId && candidate.purchaseId === item.id,
+    );
+    return {
+      ...this.withoutTenant(item)!,
+      studentName: student?.name ?? "",
+      entitlementId: entitlement?.id ?? "",
+    };
+  }
+
+  private entitlementListItem(
+    organizationId: string,
+    item: TenantItem<StudentCourseEntitlement>,
+  ): EntitlementListItem {
+    const student = this.masterData.get(
+      this.masterKey(organizationId, "students", item.studentId),
+    );
+    const purchase = this.coursePurchases.get(this.key(organizationId, item.purchaseId));
+    return {
+      ...this.withoutTenant(item)!,
+      studentName: student?.name ?? "",
+      packageName: purchase?.packageNameSnapshot ?? "",
+      courseName: purchase?.courseNameSnapshot ?? "",
+    };
   }
 
   private guardianKey(organizationId: string, guardianId: string, studentId: string): string {

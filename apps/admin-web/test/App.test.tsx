@@ -606,4 +606,68 @@ describe("管理后台", () => {
     ));
     expect(screen.queryByText("未读")).not.toBeInTheDocument();
   });
+
+  it("从侧栏进入课包管理并加载真实接口", async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      if (input === "/auth/me") {
+        return new Response(JSON.stringify({
+          data: {
+            id: "admin-1",
+            organizationId: "org-development",
+            role: "ADMIN",
+            name: "管理员",
+            phone: "13800000001",
+            mustChangePassword: false,
+          },
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (String(input).startsWith("/admin/course-packages")) {
+        return new Response(JSON.stringify({
+          data: {
+            items: [{
+              id: "package-1",
+              courseId: "course-1",
+              courseName: "少儿编程 L2",
+              name: "真实课包",
+              creditCount: 20,
+              validityMonths: 6,
+              priceCents: 199900,
+              soldCount: 0,
+              status: "ACTIVE",
+            }],
+            page: 1,
+            pageSize: 100,
+            total: 1,
+          },
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (String(input).startsWith("/admin/student-entitlements")) {
+        return new Response(JSON.stringify({
+          data: { items: [], page: 1, pageSize: 100, total: 0 },
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (String(input).startsWith("/admin/courses") || String(input).startsWith("/admin/students")) {
+        return new Response(JSON.stringify({
+          data: { items: [], page: 1, pageSize: 100, total: 0 },
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({ data: [session] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetcher);
+    render(<App />);
+    await screen.findByText("少儿编程 L2");
+
+    fireEvent.click(screen.getByRole("button", { name: "课包管理" }));
+
+    expect(screen.getByRole("heading", { name: "课包管理" })).toBeInTheDocument();
+    expect(await screen.findByText("真实课包")).toBeInTheDocument();
+    expect(screen.getByLabelText("课包管理")).toBeInTheDocument();
+    expect(fetcher).toHaveBeenCalledWith(
+      "/admin/course-packages?page=1&pageSize=20",
+      expect.anything(),
+    );
+  });
 });

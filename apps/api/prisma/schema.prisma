@@ -31,6 +31,10 @@ enum NotificationType {
   BOOKING_CANCELLED
   SESSION_REMINDER_24H
   SESSION_REMINDER_2H
+  COURSE_PACKAGE_PURCHASED
+  ENTITLEMENT_LOW_BALANCE
+  ENTITLEMENT_EXPIRING
+  ENTITLEMENT_EXPIRED
 }
 
 enum NotificationDeliveryStatus {
@@ -41,6 +45,42 @@ enum NotificationDeliveryStatus {
   SKIPPED
 }
 
+enum CoursePackageStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+}
+
+enum CoursePurchaseStatus {
+  PAID
+  CANCELLED
+  REFUNDED
+}
+
+enum EntitlementStatus {
+  ACTIVE
+  EXHAUSTED
+  EXPIRED
+  CANCELLED
+}
+
+enum CreditReservationStatus {
+  RESERVED
+  CONSUMED
+  RELEASED
+  EXPIRED
+}
+
+enum CreditLedgerType {
+  PURCHASE
+  RESERVE
+  RELEASE
+  CONSUME
+  REFUND
+  ADJUSTMENT
+  REVERSAL
+}
+
 enum UserRole {
   ADMIN
   TEACHER
@@ -48,41 +88,47 @@ enum UserRole {
 }
 
 model Organization {
-  id         String          @id @default(cuid())
-  code       String          @unique
-  name       String
-  isActive   Boolean         @default(true)
-  deletedAt  DateTime?
-  campuses   Campus[]
-  users      User[]
-  students   Student[]
-  courses    Course[]
-  classrooms Classroom[]
-  sessions   CourseSession[]
-  scheduleSeries ScheduleSeries[]
-  bookings   Booking[]
-  guardians  StudentGuardian[]
-  notifications Notification[]
-  notificationDeliveries NotificationDelivery[]
-  auditLogs     AuditLog[]
-  authSessions  AuthSession[]
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  id                         String                      @id @default(cuid())
+  code                       String                      @unique
+  name                       String
+  isActive                   Boolean                     @default(true)
+  deletedAt                  DateTime?
+  campuses                   Campus[]
+  users                      User[]
+  students                   Student[]
+  courses                    Course[]
+  classrooms                 Classroom[]
+  sessions                   CourseSession[]
+  scheduleSeries             ScheduleSeries[]
+  bookings                   Booking[]
+  guardians                  StudentGuardian[]
+  notifications              Notification[]
+  notificationDeliveries     NotificationDelivery[]
+  auditLogs                  AuditLog[]
+  authSessions               AuthSession[]
+  coursePackages             CoursePackage[]
+  coursePurchases            CoursePurchase[]
+  courseEntitlements         StudentCourseEntitlement[]
+  creditReservations         CreditReservation[]
+  creditLedgers              CreditLedger[]
+  entitlementValidityChanges EntitlementValidityChange[]
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
 }
 
 model PlatformAccount {
-  id           String            @id @default(cuid())
-  username     String            @unique
-  name         String
-  passwordHash String
-  passwordVersion Int            @default(1)
-  isActive     Boolean           @default(true)
-  mustChangePassword Boolean      @default(true)
-  lastLoginAt  DateTime?
-  sessions     PlatformSession[]
-  auditLogs    PlatformAuditLog[]
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  id                 String             @id @default(cuid())
+  username           String             @unique
+  name               String
+  passwordHash       String
+  passwordVersion    Int                @default(1)
+  isActive           Boolean            @default(true)
+  mustChangePassword Boolean            @default(true)
+  lastLoginAt        DateTime?
+  sessions           PlatformSession[]
+  auditLogs          PlatformAuditLog[]
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 }
 
 model PlatformSession {
@@ -113,16 +159,16 @@ model PlatformAuditLog {
 }
 
 model ScheduleSeries {
-  id               String          @id @default(cuid())
-  organizationId   String
-  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  recurrence       String          @default("WEEKLY")
-  intervalWeeks    Int             @default(1)
-  requestedCount   Int
-  createdBy        String
-  sessions         CourseSession[]
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  recurrence     String          @default("WEEKLY")
+  intervalWeeks  Int             @default(1)
+  requestedCount Int
+  createdBy      String
+  sessions       CourseSession[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   @@unique([id, organizationId])
   @@index([organizationId, createdAt])
@@ -148,27 +194,27 @@ model Campus {
 }
 
 model User {
-  id              String            @id @default(cuid())
-  organizationId  String
-  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  role            UserRole
-  name            String
-  phone           String?
-  email           String?
-  specialty       String?
-  remark          String?
-  passwordHash    String?
-  wechatOpenId    String?
-  isActive        Boolean           @default(true)
-  mustChangePassword Boolean         @default(false)
-  lastLoginAt     DateTime?
-  teacherSessions CourseSession[] @relation("SessionTeacher")
-  guardianLinks   StudentGuardian[]
-  notifications   Notification[]
+  id                     String                 @id @default(cuid())
+  organizationId         String
+  organization           Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role                   UserRole
+  name                   String
+  phone                  String?
+  email                  String?
+  specialty              String?
+  remark                 String?
+  passwordHash           String?
+  wechatOpenId           String?
+  isActive               Boolean                @default(true)
+  mustChangePassword     Boolean                @default(false)
+  lastLoginAt            DateTime?
+  teacherSessions        CourseSession[]        @relation("SessionTeacher")
+  guardianLinks          StudentGuardian[]
+  notifications          Notification[]
   notificationDeliveries NotificationDelivery[]
-  authSessions    AuthSession[]
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  authSessions           AuthSession[]
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
 
   @@unique([id, organizationId])
   @@unique([organizationId, phone])
@@ -192,21 +238,23 @@ model AuthSession {
 }
 
 model Student {
-  id              String            @id @default(cuid())
-  organizationId  String
-  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name            String
-  phone           String?
-  gender          String?
-  birthDate       DateTime?         @db.Date
-  campusId        String?
-  campus          Campus?           @relation(fields: [campusId, organizationId], references: [id, organizationId])
-  remark          String?
-  isActive        Boolean           @default(true)
-  guardianLinks   StudentGuardian[]
-  bookings        Booking[]
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  id                 String                     @id @default(cuid())
+  organizationId     String
+  organization       Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name               String
+  phone              String?
+  gender             String?
+  birthDate          DateTime?                  @db.Date
+  campusId           String?
+  campus             Campus?                    @relation(fields: [campusId, organizationId], references: [id, organizationId])
+  remark             String?
+  isActive           Boolean                    @default(true)
+  guardianLinks      StudentGuardian[]
+  bookings           Booking[]
+  coursePurchases    CoursePurchase[]
+  courseEntitlements StudentCourseEntitlement[]
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
 
   @@unique([id, organizationId])
   @@index([organizationId, name])
@@ -229,17 +277,20 @@ model StudentGuardian {
 }
 
 model Course {
-  id             String          @id @default(cuid())
-  organizationId String
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name           String
-  code           String?
-  durationMinutes Int
-  description    String?
-  isActive       Boolean         @default(true)
-  sessions       CourseSession[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  id                 String                     @id @default(cuid())
+  organizationId     String
+  organization       Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name               String
+  code               String?
+  durationMinutes    Int
+  description        String?
+  isActive           Boolean                    @default(true)
+  sessions           CourseSession[]
+  coursePackages     CoursePackage[]
+  coursePurchases    CoursePurchase[]
+  courseEntitlements StudentCourseEntitlement[]
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
 
   @@unique([id, organizationId])
   @@unique([organizationId, name])
@@ -266,73 +317,250 @@ model Classroom {
 }
 
 model CourseSession {
-  id               String        @id @default(cuid())
+  id               String          @id @default(cuid())
   organizationId   String
-  organization     Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   courseId         String
-  course           Course        @relation(fields: [courseId, organizationId], references: [id, organizationId])
+  course           Course          @relation(fields: [courseId, organizationId], references: [id, organizationId])
   campusId         String
-  campus           Campus        @relation(fields: [campusId, organizationId], references: [id, organizationId])
+  campus           Campus          @relation(fields: [campusId, organizationId], references: [id, organizationId])
   classroomId      String?
-  classroom        Classroom?    @relation(fields: [classroomId, organizationId], references: [id, organizationId])
+  classroom        Classroom?      @relation(fields: [classroomId, organizationId], references: [id, organizationId])
   teacherId        String
-  teacher          User          @relation("SessionTeacher", fields: [teacherId, organizationId], references: [id, organizationId])
-  startsAt         DateTime      @db.Timestamptz(3)
-  endsAt           DateTime      @db.Timestamptz(3)
+  teacher          User            @relation("SessionTeacher", fields: [teacherId, organizationId], references: [id, organizationId])
+  startsAt         DateTime        @db.Timestamptz(3)
+  endsAt           DateTime        @db.Timestamptz(3)
   capacity         Int
-  status           SessionStatus @default(PUBLISHED)
-  bookingOpensAt   DateTime      @db.Timestamptz(3)
-  bookingClosesAt  DateTime      @db.Timestamptz(3)
-  cancelDeadlineAt DateTime      @db.Timestamptz(3)
+  status           SessionStatus   @default(PUBLISHED)
+  bookingOpensAt   DateTime        @db.Timestamptz(3)
+  bookingClosesAt  DateTime        @db.Timestamptz(3)
+  cancelDeadlineAt DateTime        @db.Timestamptz(3)
   seriesId         String?
-  series            ScheduleSeries? @relation(fields: [seriesId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  series           ScheduleSeries? @relation(fields: [seriesId, organizationId], references: [id, organizationId], onDelete: Cascade)
   occurrenceIndex  Int?
   bookings         Booking[]
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
   @@unique([id, organizationId])
+  @@unique([organizationId, seriesId, occurrenceIndex])
   @@index([organizationId, teacherId, startsAt, endsAt])
   @@index([organizationId, classroomId, startsAt, endsAt])
   @@index([organizationId, campusId, startsAt])
-  @@unique([organizationId, seriesId, occurrenceIndex])
 }
 
 model Booking {
-  id             String        @id @default(cuid())
-  organizationId String
-  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  sessionId      String
-  session        CourseSession @relation(fields: [sessionId, organizationId], references: [id, organizationId], onDelete: Cascade)
-  studentId      String
-  student        Student       @relation(fields: [studentId, organizationId], references: [id, organizationId])
-  status         BookingStatus @default(CONFIRMED)
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  id                 String                    @id @default(cuid())
+  organizationId     String
+  organization       Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sessionId          String
+  session            CourseSession             @relation(fields: [sessionId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  studentId          String
+  student            Student                   @relation(fields: [studentId, organizationId], references: [id, organizationId])
+  entitlementId      String?
+  entitlement        StudentCourseEntitlement? @relation(fields: [entitlementId, organizationId], references: [id, organizationId])
+  status             BookingStatus             @default(CONFIRMED)
+  creditReservations CreditReservation[]
+  creditLedgers      CreditLedger[]
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
 
   @@unique([id, organizationId])
   @@unique([organizationId, sessionId, studentId])
   @@index([organizationId, studentId, status])
+  @@index([organizationId, entitlementId])
 }
 
 model Notification {
-  id             String           @id @default(cuid())
+  id             String                    @id @default(cuid())
   organizationId String
-  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   userId         String
-  user           User             @relation(fields: [userId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  user           User                      @relation(fields: [userId, organizationId], references: [id, organizationId], onDelete: Cascade)
   type           NotificationType
   title          String
   content        String
   sessionId      String?
+  entitlementId  String?
+  entitlement    StudentCourseEntitlement? @relation(fields: [entitlementId, organizationId], references: [id, organizationId])
   idempotencyKey String?
   deliveries     NotificationDelivery[]
   readAt         DateTime?
-  createdAt      DateTime         @default(now())
+  createdAt      DateTime                  @default(now())
 
   @@unique([id, organizationId])
   @@unique([organizationId, idempotencyKey])
   @@index([organizationId, userId, readAt, createdAt])
+  @@index([organizationId, entitlementId])
+}
+
+model CoursePackage {
+  id                            String                     @id @default(cuid())
+  version                       Int                        @default(0)
+  organizationId                String
+  organization                  Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  courseId                      String
+  course                        Course                     @relation(fields: [courseId, organizationId], references: [id, organizationId])
+  name                          String
+  description                   String?
+  creditCount                   Int
+  validityMonths                Int
+  priceCents                    Int
+  absentDeductsCredit           Boolean                    @default(false)
+  lateCancellationDeductsCredit Boolean                    @default(false)
+  status                        CoursePackageStatus        @default(DRAFT)
+  purchases                     CoursePurchase[]
+  entitlements                  StudentCourseEntitlement[]
+  createdAt                     DateTime                   @default(now())
+  updatedAt                     DateTime                   @updatedAt
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, name])
+  @@index([organizationId, courseId, status])
+}
+
+model CoursePurchase {
+  id                                    String                    @id @default(cuid())
+  organizationId                        String
+  organization                          Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  packageId                             String
+  package                               CoursePackage             @relation(fields: [packageId, organizationId], references: [id, organizationId])
+  packageNameSnapshot                   String
+  courseId                              String
+  course                                Course                    @relation(fields: [courseId, organizationId], references: [id, organizationId])
+  courseNameSnapshot                    String
+  studentId                             String
+  student                               Student                   @relation(fields: [studentId, organizationId], references: [id, organizationId])
+  creditCount                           Int
+  validityMonths                        Int
+  paidAmountCents                       Int
+  status                                CoursePurchaseStatus      @default(PAID)
+  purchasedAt                           DateTime                  @default(now()) @db.Timestamptz(3)
+  note                                  String?
+  createdBy                             String
+  idempotencyKey                        String
+  requestFingerprint                    String
+  absentDeductsCreditSnapshot           Boolean
+  lateCancellationDeductsCreditSnapshot Boolean
+  entitlement                           StudentCourseEntitlement?
+  creditLedgers                         CreditLedger[]
+  createdAt                             DateTime                  @default(now())
+  updatedAt                             DateTime                  @updatedAt
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, idempotencyKey])
+  @@index([organizationId, studentId, purchasedAt])
+  @@index([organizationId, packageId, status])
+}
+
+model StudentCourseEntitlement {
+  id               String                      @id @default(cuid())
+  organizationId   String
+  organization     Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  purchaseId       String
+  purchase         CoursePurchase              @relation(fields: [purchaseId, organizationId], references: [id, organizationId])
+  packageId        String
+  package          CoursePackage               @relation(fields: [packageId, organizationId], references: [id, organizationId])
+  courseId         String
+  course           Course                      @relation(fields: [courseId, organizationId], references: [id, organizationId])
+  studentId        String
+  student          Student                     @relation(fields: [studentId, organizationId], references: [id, organizationId])
+  totalCredits     Int
+  remainingCredits Int
+  reservedCredits  Int                         @default(0)
+  version          Int                         @default(0)
+  validFrom        DateTime                    @db.Date
+  validUntil       DateTime                    @db.Date
+  status           EntitlementStatus           @default(ACTIVE)
+  bookings         Booking[]
+  notifications    Notification[]
+  reservations     CreditReservation[]
+  creditLedgers    CreditLedger[]
+  validityChanges  EntitlementValidityChange[]
+  createdAt        DateTime                    @default(now())
+  updatedAt        DateTime                    @updatedAt
+
+  @@unique([id, organizationId])
+  @@unique([purchaseId, organizationId])
+  @@index([organizationId, studentId, courseId, status])
+  @@index([organizationId, validUntil, status])
+}
+
+model CreditReservation {
+  id                      String                   @id @default(cuid())
+  organizationId          String
+  organization            Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  entitlementId           String
+  entitlement             StudentCourseEntitlement @relation(fields: [entitlementId, organizationId], references: [id, organizationId])
+  bookingId               String
+  booking                 Booking                  @relation(fields: [bookingId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  credits                 Int                      @default(1)
+  status                  CreditReservationStatus  @default(RESERVED)
+  expiresAt               DateTime?                @db.Timestamptz(3)
+  releasedAt              DateTime?                @db.Timestamptz(3)
+  consumedAt              DateTime?                @db.Timestamptz(3)
+  settlementAttemptCount  Int                      @default(0)
+  nextSettlementAttemptAt DateTime?                @db.Timestamptz(3)
+  settlementLastError     String?
+  creditLedgers           CreditLedger[]
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, bookingId])
+  @@index([organizationId, entitlementId, status])
+  @@index([status, expiresAt])
+  @@index([status, nextSettlementAttemptAt, expiresAt])
+}
+
+model CreditLedger {
+  id                   String                   @id @default(cuid())
+  organizationId       String
+  organization         Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  entitlementId        String
+  entitlement          StudentCourseEntitlement @relation(fields: [entitlementId, organizationId], references: [id, organizationId])
+  purchaseId           String?
+  purchase             CoursePurchase?          @relation(fields: [purchaseId, organizationId], references: [id, organizationId])
+  reservationId        String?
+  reservation          CreditReservation?       @relation(fields: [reservationId, organizationId], references: [id, organizationId])
+  bookingId            String?
+  booking              Booking?                 @relation(fields: [bookingId, organizationId], references: [id, organizationId])
+  idempotencyKey       String
+  type                 CreditLedgerType
+  creditDelta          Int
+  balanceAfter         Int
+  reservedCreditDelta  Int                      @default(0)
+  reservedBalanceAfter Int                      @default(0)
+  reversalOfId         String?
+  reversalOf           CreditLedger?            @relation("CreditLedgerReversal", fields: [reversalOfId, organizationId], references: [id, organizationId])
+  reversals            CreditLedger[]           @relation("CreditLedgerReversal")
+  actorId              String
+  note                 String?
+  occurredAt           DateTime                 @default(now()) @db.Timestamptz(3)
+  createdAt            DateTime                 @default(now())
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, idempotencyKey])
+  @@unique([organizationId, reversalOfId])
+  @@index([organizationId, entitlementId, occurredAt])
+  @@index([organizationId, bookingId])
+  @@index([organizationId, purchaseId])
+}
+
+model EntitlementValidityChange {
+  id                 String                   @id @default(cuid())
+  organizationId     String
+  organization       Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  entitlementId      String
+  entitlement        StudentCourseEntitlement @relation(fields: [entitlementId, organizationId], references: [id, organizationId])
+  previousValidUntil DateTime                 @db.Date
+  newValidUntil      DateTime                 @db.Date
+  reason             String
+  changedBy          String
+  createdAt          DateTime                 @default(now())
+
+  @@unique([id, organizationId])
+  @@index([organizationId, entitlementId, createdAt])
 }
 
 model NotificationDelivery {

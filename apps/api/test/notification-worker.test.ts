@@ -5,7 +5,11 @@ import {
   type NotificationDelivery,
 } from "../src/domain.js";
 import { MemoryRepository } from "../src/memory-repository.js";
-import { NotificationWorker, parseWechatTemplateConfig } from "../src/notification-worker.js";
+import {
+  NotificationWorker,
+  parseWechatTemplateConfig,
+  runNotificationWorkerStages,
+} from "../src/notification-worker.js";
 
 const NOW = new Date("2026-09-01T10:00:00.000Z");
 
@@ -138,6 +142,32 @@ describe("SchedulingService 通知 Outbox", () => {
     ).toBe(true);
   });
 
+  it("取消-重约-再取消生成第二轮通知且每轮重复取消幂等", async () => {
+    const repo = repository();
+    let current = NOW;
+    let sequence = 0;
+    const service = new SchedulingService(
+      repo,
+      () => current,
+      () => `cycle-${++sequence}`,
+    );
+    const first = await service.book("session-1", "student-1");
+
+    await service.cancelBooking(first.booking.id);
+    await service.cancelBooking(first.booking.id);
+    current = new Date(NOW.getTime() + 1);
+    const second = await service.book("session-1", "student-1");
+    current = new Date(NOW.getTime() + 2);
+    await service.cancelBooking(second.booking.id);
+    await service.cancelBooking(second.booking.id);
+
+    const cancellations = (
+      await repo.listAdminNotificationDeliveries("org-development", 20)
+    ).filter((item) => item.notification.type === "BOOKING_CANCELLED");
+    expect(cancellations).toHaveLength(4);
+    expect(new Set(cancellations.map((item) => item.idempotencyKey)).size).toBe(4);
+  });
+
   it("24 小时和 2 小时提醒分别只入队一次", async () => {
     const repo = repository();
     let current = NOW;
@@ -188,6 +218,7 @@ describe("NotificationWorker", () => {
           title: "预约成功",
           content: "课程预约成功",
           sessionId: "session-1",
+          entitlementId: null,
           idempotencyKey: "event-1:guardian-1",
           readAt: null,
           createdAt: NOW,
@@ -302,5 +333,51 @@ describe("NotificationWorker", () => {
       "template-shared",
       "template-reminder",
     ]);
+  });
+
+  it("某机构预占结算失败后仍继续处理后续机构", async () => {
+    class PartiallyFailingRepository extends MemoryRepository {
+      readonly visited: string[] = [];
+
+      override async listOrganizationIds() {
+        return ["org-a", "org-b"];
+      }
+
+      override async listExpiredCreditReservations(organizationId: string) {
+        this.visited.push(organizationId);
+        if (organizationId === "org-a") throw new Error("org-a settlement failed");
+        return [];
+      }
+    }
+    const repo = new PartiallyFailingRepository({
+      organizations: ["org-a", "org-b"],
+    });
+    const worker = new NotificationWorker(repo, undefined, { templateIds: {} }, () => NOW);
+
+    await expect(worker.settleExpiredReservations()).rejects.toThrow(
+      "org-a settlement failed",
+    );
+    expect(repo.visited).toEqual(["org-a", "org-b"]);
+  });
+});
+
+describe("runNotificationWorkerStages", () => {
+  it("任一阶段失败时仍执行后续阶段并逐阶段上报错误", async () => {
+    const settlementError = new Error("settlement failed");
+    const deliveryError = new Error("delivery failed");
+    const worker = {
+      settleExpiredReservations: vi.fn().mockRejectedValue(settlementError),
+      enqueueReminders: vi.fn().mockResolvedValue(2),
+      processBatch: vi.fn().mockRejectedValue(deliveryError),
+    };
+    const onError = vi.fn();
+
+    await expect(runNotificationWorkerStages(worker, onError)).resolves.toBeUndefined();
+
+    expect(worker.settleExpiredReservations).toHaveBeenCalledOnce();
+    expect(worker.enqueueReminders).toHaveBeenCalledOnce();
+    expect(worker.processBatch).toHaveBeenCalledOnce();
+    expect(onError).toHaveBeenNthCalledWith(1, settlementError, "课时预占结算");
+    expect(onError).toHaveBeenNthCalledWith(2, deliveryError, "通知投递");
   });
 });

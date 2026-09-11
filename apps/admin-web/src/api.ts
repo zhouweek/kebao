@@ -271,6 +271,130 @@ export interface MasterDataPage {
   total: number;
 }
 
+export type CoursePackageStatus = "DRAFT" | "ACTIVE" | "INACTIVE";
+export type StudentEntitlementStatus = "ACTIVE" | "EXHAUSTED" | "EXPIRED" | "CANCELLED";
+export type CreditLedgerType =
+  | "PURCHASE"
+  | "RESERVE"
+  | "RELEASE"
+  | "CONSUME"
+  | "REFUND"
+  | "ADJUSTMENT"
+  | "REVERSAL";
+
+export interface CoursePackageItem {
+  id: string;
+  version: number;
+  courseId: string;
+  courseName: string;
+  name: string;
+  description: string | null;
+  creditCount: number;
+  validityMonths: number;
+  priceCents: number;
+  absentDeductsCredit: boolean;
+  lateCancellationDeductsCredit: boolean;
+  status: CoursePackageStatus;
+  soldCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CoursePackageInput {
+  courseId: string;
+  name: string;
+  description?: string | null;
+  creditCount: number;
+  validityMonths: number;
+  priceCents: number;
+  absentDeductsCredit: boolean;
+  lateCancellationDeductsCredit: boolean;
+  status?: CoursePackageStatus;
+}
+
+export interface StudentEntitlementItem {
+  id: string;
+  purchaseId: string;
+  packageId: string;
+  packageName: string;
+  courseId: string;
+  courseName: string;
+  studentId: string;
+  studentName: string;
+  totalCredits: number;
+  remainingCredits: number;
+  reservedCredits: number;
+  version: number;
+  validFrom: string;
+  validUntil: string;
+  status: StudentEntitlementStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreditLedgerItem {
+  id: string;
+  entitlementId: string;
+  purchaseId: string | null;
+  reservationId: string | null;
+  bookingId: string | null;
+  idempotencyKey: string;
+  type: CreditLedgerType;
+  creditDelta: number;
+  balanceAfter: number;
+  reservedCreditDelta: number;
+  reservedBalanceAfter: number;
+  reversalOfId: string | null;
+  actorId: string;
+  note: string | null;
+  occurredAt: string;
+  createdAt: string;
+}
+
+export interface EntitlementValidityChangeItem {
+  id: string;
+  entitlementId: string;
+  previousValidUntil: string;
+  newValidUntil: string;
+  reason: string;
+  changedBy: string;
+  createdAt: string;
+}
+
+export interface CoursePackagePage<T> {
+  items: T[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+export interface CoursePackageQuery {
+  page?: number;
+  pageSize?: number;
+  keyword?: string;
+  status?: string;
+  courseId?: string;
+  studentId?: string;
+}
+
+export interface EntitlementDetailQuery {
+  page?: number;
+  pageSize?: number;
+  keyword?: string;
+}
+
+export interface CoursePackagePurchaseResult {
+  purchase: {
+    id: string;
+    packageId: string;
+    studentId: string;
+    paidAmountCents: number;
+    purchasedAt: string;
+  };
+  entitlement: StudentEntitlementItem;
+  alreadyPurchased: boolean;
+}
+
 interface ApiErrorPayload {
   error?: {
     code?: string;
@@ -811,4 +935,151 @@ export async function setStudentGuardians(
     body: JSON.stringify({ guardians }),
   }, fetcher);
   return parseResponse<MasterDataItem>(response);
+}
+
+function coursePackageSearch(query: CoursePackageQuery): string {
+  const search = new URLSearchParams();
+  if (query.page) search.set("page", String(query.page));
+  if (query.pageSize) search.set("pageSize", String(query.pageSize));
+  if (query.keyword) search.set("keyword", query.keyword);
+  if (query.status) search.set("status", query.status);
+  if (query.courseId) search.set("courseId", query.courseId);
+  if (query.studentId) search.set("studentId", query.studentId);
+  return search.size ? `?${search}` : "";
+}
+
+export async function getCoursePackages(
+  query: CoursePackageQuery = {},
+  fetcher: typeof fetch = fetch,
+): Promise<CoursePackagePage<CoursePackageItem>> {
+  const response = await authenticatedFetch(
+    `/admin/course-packages${coursePackageSearch(query)}`,
+    { headers: { Accept: "application/json", ...authHeaders() } },
+    fetcher,
+  );
+  return parseResponse<CoursePackagePage<CoursePackageItem>>(response);
+}
+
+export async function createCoursePackage(
+  input: CoursePackageInput,
+  fetcher: typeof fetch = fetch,
+): Promise<CoursePackageItem> {
+  const response = await authenticatedFetch("/admin/course-packages", {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify(input),
+  }, fetcher);
+  return parseResponse<CoursePackageItem>(response);
+}
+
+export async function updateCoursePackage(
+  id: string,
+  input: Partial<CoursePackageInput>,
+  fetcher: typeof fetch = fetch,
+): Promise<CoursePackageItem> {
+  const response = await authenticatedFetch(
+    `/admin/course-packages/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      headers: jsonHeaders(),
+      body: JSON.stringify(input),
+    },
+    fetcher,
+  );
+  return parseResponse<CoursePackageItem>(response);
+}
+
+export async function setCoursePackageStatus(
+  id: string,
+  status: CoursePackageStatus,
+  fetcher: typeof fetch = fetch,
+): Promise<CoursePackageItem> {
+  const response = await authenticatedFetch(
+    `/admin/course-packages/${encodeURIComponent(id)}/status`,
+    {
+      method: "PATCH",
+      headers: jsonHeaders(),
+      body: JSON.stringify({ status }),
+    },
+    fetcher,
+  );
+  return parseResponse<CoursePackageItem>(response);
+}
+
+export async function createCoursePackagePurchase(
+  input: {
+    packageId: string;
+    studentId: string;
+    paidAmountCents?: number;
+    purchasedAt?: string;
+    note?: string | null;
+    idempotencyKey: string;
+  },
+  fetcher: typeof fetch = fetch,
+): Promise<CoursePackagePurchaseResult> {
+  const response = await authenticatedFetch("/admin/course-package-purchases", {
+    method: "POST",
+    headers: { ...jsonHeaders(), "Idempotency-Key": input.idempotencyKey },
+    body: JSON.stringify(input),
+  }, fetcher);
+  return parseResponse<CoursePackagePurchaseResult>(response);
+}
+
+export async function getStudentEntitlements(
+  query: CoursePackageQuery = {},
+  fetcher: typeof fetch = fetch,
+): Promise<CoursePackagePage<StudentEntitlementItem>> {
+  const response = await authenticatedFetch(
+    `/admin/student-entitlements${coursePackageSearch(query)}`,
+    { headers: { Accept: "application/json", ...authHeaders() } },
+    fetcher,
+  );
+  return parseResponse<CoursePackagePage<StudentEntitlementItem>>(response);
+}
+
+export async function getEntitlementLedger(
+  entitlementId: string,
+  queryOrFetcher: EntitlementDetailQuery | typeof fetch = {},
+  fetcher: typeof fetch = fetch,
+): Promise<CoursePackagePage<CreditLedgerItem>> {
+  const query = typeof queryOrFetcher === "function" ? {} : queryOrFetcher;
+  const request = typeof queryOrFetcher === "function" ? queryOrFetcher : fetcher;
+  const response = await authenticatedFetch(
+    `/admin/student-entitlements/${encodeURIComponent(entitlementId)}/ledger${coursePackageSearch(query)}`,
+    { headers: { Accept: "application/json", ...authHeaders() } },
+    request,
+  );
+  return parseResponse<CoursePackagePage<CreditLedgerItem>>(response);
+}
+
+export async function extendStudentEntitlement(
+  entitlementId: string,
+  input: { months: number; reason: string; version: number },
+  fetcher: typeof fetch = fetch,
+): Promise<StudentEntitlementItem> {
+  const response = await authenticatedFetch(
+    `/admin/student-entitlements/${encodeURIComponent(entitlementId)}/extensions`,
+    {
+      method: "POST",
+      headers: jsonHeaders(),
+      body: JSON.stringify(input),
+    },
+    fetcher,
+  );
+  return parseResponse<StudentEntitlementItem>(response);
+}
+
+export async function getEntitlementValidityChanges(
+  entitlementId: string,
+  queryOrFetcher: EntitlementDetailQuery | typeof fetch = {},
+  fetcher: typeof fetch = fetch,
+): Promise<CoursePackagePage<EntitlementValidityChangeItem>> {
+  const query = typeof queryOrFetcher === "function" ? {} : queryOrFetcher;
+  const request = typeof queryOrFetcher === "function" ? queryOrFetcher : fetcher;
+  const response = await authenticatedFetch(
+    `/admin/student-entitlements/${encodeURIComponent(entitlementId)}/validity-changes${coursePackageSearch(query)}`,
+    { headers: { Accept: "application/json", ...authHeaders() } },
+    request,
+  );
+  return parseResponse<CoursePackagePage<EntitlementValidityChangeItem>>(response);
 }

@@ -53,6 +53,26 @@ export class NotificationWorker {
     return created;
   }
 
+  async settleExpiredReservations(limitPerOrganization = 100): Promise<number> {
+    let settled = 0;
+    let firstError: unknown;
+    for (const organizationId of await this.repository.listOrganizationIds()) {
+      try {
+        settled += await new SchedulingService(
+          this.repository,
+          this.now,
+          undefined,
+          organizationId,
+          "reservation-worker",
+        ).settleExpiredReservations(limitPerOrganization);
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+    if (firstError) throw firstError;
+    return settled;
+  }
+
   async processBatch(limit = 50): Promise<number> {
     const due = await this.repository.listDueNotificationDeliveries(this.now(), limit);
     let processed = 0;
@@ -137,6 +157,27 @@ export class NotificationWorker {
           : new Date(this.now().getTime() + Math.min(60, 2 ** attemptCount) * 60_000),
         updatedAt: this.now(),
       });
+    }
+  }
+}
+
+export async function runNotificationWorkerStages(
+  worker: Pick<
+    NotificationWorker,
+    "settleExpiredReservations" | "enqueueReminders" | "processBatch"
+  >,
+  onError: (error: unknown, stageName: string) => void,
+): Promise<void> {
+  const stages = [
+    ["课时预占结算", () => worker.settleExpiredReservations()],
+    ["课程提醒入队", () => worker.enqueueReminders()],
+    ["通知投递", () => worker.processBatch()],
+  ] as const;
+  for (const [name, action] of stages) {
+    try {
+      await action();
+    } catch (error) {
+      onError(error, name);
     }
   }
 }

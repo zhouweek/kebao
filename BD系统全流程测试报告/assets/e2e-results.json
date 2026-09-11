@@ -1,0 +1,4556 @@
+{
+  "meta": {
+    "tag": "1789102590998-poff",
+    "baseUrl": "http://127.0.0.1:3000",
+    "startedAt": "2026-09-11T04:56:30.998Z",
+    "sourceModified": false,
+    "finishedAt": "2026-09-11T04:56:53.138Z"
+  },
+  "cases": [
+    {
+      "name": "健康检查",
+      "method": "GET",
+      "path": "/health",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "response": {
+        "status": "ok",
+        "requestId": "req-1"
+      },
+      "requestId": "req-1",
+      "durationMs": 34
+    },
+    {
+      "name": "PostgreSQL 就绪检查",
+      "method": "GET",
+      "path": "/ready",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "response": {
+        "status": "ready",
+        "requestId": "req-2"
+      },
+      "requestId": "req-2",
+      "durationMs": 4
+    },
+    {
+      "name": "平台管理员登录",
+      "method": "POST",
+      "path": "/platform/auth/login",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "request": {
+        "username": "superadmin",
+        "password": "[REDACTED]"
+      },
+      "response": {
+        "data": {
+          "accessToken": "[REDACTED]",
+          "refreshToken": "[REDACTED]",
+          "accessTokenExpiresIn": "[REDACTED]",
+          "account": {
+            "id": "cmtwhh5z20000k6j5q03jqzkg",
+            "username": "superadmin",
+            "name": "超级管理员",
+            "isActive": true,
+            "mustChangePassword": "[REDACTED]"
+          }
+        }
+      },
+      "requestId": "req-3",
+      "durationMs": 47
+    },
+    {
+      "name": "平台首次改密前身份查询",
+      "method": "GET",
+      "path": "/platform/auth/me",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "response": {
+        "data": {
+          "id": "cmtwhh5z20000k6j5q03jqzkg",
+          "username": "superadmin",
+          "name": "超级管理员",
+          "isActive": true,
+          "mustChangePassword": "[REDACTED]"
+        }
+      },
+      "requestId": "req-4",
+      "durationMs": 4
+    },
+    {
+      "name": "平台首次改密前禁止业务",
+      "method": "GET",
+      "path": "/platform/organizations",
+      "expectedStatus": [
+        403
+      ],
+      "actualStatus": 403,
+      "expectedErrorCode": "PASSWORD_CHANGE_REQUIRED",
+      "actualErrorCode": "PASSWORD_CHANGE_REQUIRED",
+      "passed": true,
+      "response": {
+        "error": {
+          "code": "PASSWORD_CHANGE_REQUIRED",
+          "message": "首次登录或密码重置后必须修改密码"
+        },
+        "requestId": "req-5"
+      },
+      "requestId": "req-5",
+      "durationMs": 3
+    },
+    {
+      "name": "平台首次修改密码",
+      "method": "POST",
+      "path": "/platform/auth/change-password",
+      "expectedStatus": [
+        204
+      ],
+      "actualStatus": 204,
+      "passed": true,
+      "request": {
+        "currentPassword": "[REDACTED]",
+        "newPassword": "[REDACTED]"
+      },
+      "response": null,
+      "requestId": "req-6",
+      "durationMs": 78
+    },
+    {
+      "name": "平台改密后登录",
+      "method": "POST",
+      "path": "/platform/auth/login",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "request": {
+        "username": "superadmin",
+        "password": "[REDACTED]"
+      },
+      "response": {
+        "data": {
+          "accessToken": "[REDACTED]",
+          "refreshToken": "[REDACTED]",
+          "accessTokenExpiresIn": "[REDACTED]",
+          "account": {
+            "id": "cmtwhh5z20000k6j5q03jqzkg",
+            "username": "superadmin",
+            "name": "超级管理员",
+            "isActive": true,
+            "mustChangePassword": "[REDACTED]"
+          }
+        }
+      },
+      "requestId": "req-7",
+      "durationMs": 34
+    },
+    {
+      "name": "创建主机构",
+      "method": "POST",
+      "path": "/platform/organizations",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "code": "BD",
+        "name": "BD"
+      },
+      "response": {
+        "data": {
+          "id": "c101d97e-d961-410f-96fc-5f25613d39ac",
+          "code": "BD",
+          "name": "BD",
+          "isActive": true,
+          "deletedAt": null,
+          "createdAt": "2026-09-11T04:56:31.209Z",
+          "updatedAt": "2026-09-11T04:56:31.209Z"
+        }
+      },
+      "requestId": "req-8",
+      "durationMs": 13
+    },
+    {
+      "name": "创建主机构管理员",
+      "method": "POST",
+      "path": "/platform/organizations/c101d97e-d961-410f-96fc-5f25613d39ac/admins",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "name": "主机构管理员",
+        "phone": "13902590998"
+      },
+      "response": {
+        "data": {
+          "id": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+          "organizationId": "c101d97e-d961-410f-96fc-5f25613d39ac",
+          "name": "主机构管理员",
+          "phone": "13902590998",
+          "email": null,
+          "isActive": true,
+          "mustChangePassword": "[REDACTED]",
+          "lastLoginAt": null,
+          "createdAt": "2026-09-11T04:56:31.246Z",
+          "updatedAt": "2026-09-11T04:56:31.246Z",
+          "temporaryPassword": "[REDACTED]"
+        }
+      },
+      "requestId": "req-9",
+      "durationMs": 33
+    },
+    {
+      "name": "主机构管理员首次登录",
+      "method": "POST",
+      "path": "/auth/admin/login",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "request": {
+        "organizationCode": "BD",
+        "phone": "13902590998",
+        "password": "[REDACTED]"
+      },
+      "response": {
+        "data": {
+          "accessToken": "[REDACTED]",
+          "refreshToken": "[REDACTED]",
+          "accessTokenExpiresIn": "[REDACTED]",
+          "user": {
+            "id": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+            "organizationId": "c101d97e-d961-410f-96fc-5f25613d39ac",
+            "role": "ADMIN",
+            "name": "主机构管理员",
+            "phone": "13902590998",
+            "mustChangePassword": "[REDACTED]"
+          }
+        }
+      },
+      "requestId": "req-a",
+      "durationMs": 35
+    },
+    {
+      "name": "主机构管理员首次改密前禁止业务",
+      "method": "GET",
+      "path": "/admin/campuses",
+      "expectedStatus": [
+        403
+      ],
+      "actualStatus": 403,
+      "expectedErrorCode": "PASSWORD_CHANGE_REQUIRED",
+      "actualErrorCode": "PASSWORD_CHANGE_REQUIRED",
+      "passed": true,
+      "response": {
+        "error": {
+          "code": "PASSWORD_CHANGE_REQUIRED",
+          "message": "首次登录或密码重置后必须修改密码"
+        },
+        "requestId": "req-b"
+      },
+      "requestId": "req-b",
+      "durationMs": 4
+    },
+    {
+      "name": "主机构管理员首次修改密码",
+      "method": "POST",
+      "path": "/auth/change-password",
+      "expectedStatus": [
+        204
+      ],
+      "actualStatus": 204,
+      "passed": true,
+      "request": {
+        "currentPassword": "[REDACTED]",
+        "newPassword": "[REDACTED]"
+      },
+      "response": null,
+      "requestId": "req-c",
+      "durationMs": 80
+    },
+    {
+      "name": "主机构管理员改密后登录",
+      "method": "POST",
+      "path": "/auth/admin/login",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "request": {
+        "organizationCode": "BD",
+        "phone": "13902590998",
+        "password": "[REDACTED]"
+      },
+      "response": {
+        "data": {
+          "accessToken": "[REDACTED]",
+          "refreshToken": "[REDACTED]",
+          "accessTokenExpiresIn": "[REDACTED]",
+          "user": {
+            "id": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+            "organizationId": "c101d97e-d961-410f-96fc-5f25613d39ac",
+            "role": "ADMIN",
+            "name": "主机构管理员",
+            "phone": "13902590998",
+            "mustChangePassword": "[REDACTED]"
+          }
+        }
+      },
+      "requestId": "req-d",
+      "durationMs": 34
+    },
+    {
+      "name": "创建隔离机构",
+      "method": "POST",
+      "path": "/platform/organizations",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "code": "ISO02590998",
+        "name": "隔离机构-1789102590998-poff"
+      },
+      "response": {
+        "data": {
+          "id": "75a6d9fa-577b-4eda-81d0-bfe86754f1b3",
+          "code": "ISO02590998",
+          "name": "隔离机构-1789102590998-poff",
+          "isActive": true,
+          "deletedAt": null,
+          "createdAt": "2026-09-11T04:56:31.406Z",
+          "updatedAt": "2026-09-11T04:56:31.406Z"
+        }
+      },
+      "requestId": "req-e",
+      "durationMs": 6
+    },
+    {
+      "name": "创建隔离机构管理员",
+      "method": "POST",
+      "path": "/platform/organizations/75a6d9fa-577b-4eda-81d0-bfe86754f1b3/admins",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "name": "隔离机构管理员",
+        "phone": "13802590998"
+      },
+      "response": {
+        "data": {
+          "id": "bb270eca-817c-44c0-a271-2933172cf4c7",
+          "organizationId": "75a6d9fa-577b-4eda-81d0-bfe86754f1b3",
+          "name": "隔离机构管理员",
+          "phone": "13802590998",
+          "email": null,
+          "isActive": true,
+          "mustChangePassword": "[REDACTED]",
+          "lastLoginAt": null,
+          "createdAt": "2026-09-11T04:56:31.438Z",
+          "updatedAt": "2026-09-11T04:56:31.438Z",
+          "temporaryPassword": "[REDACTED]"
+        }
+      },
+      "requestId": "req-f",
+      "durationMs": 33
+    },
+    {
+      "name": "隔离机构管理员首次登录",
+      "method": "POST",
+      "path": "/auth/admin/login",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "request": {
+        "organizationCode": "ISO02590998",
+        "phone": "13802590998",
+        "password": "[REDACTED]"
+      },
+      "response": {
+        "data": {
+          "accessToken": "[REDACTED]",
+          "refreshToken": "[REDACTED]",
+          "accessTokenExpiresIn": "[REDACTED]",
+          "user": {
+            "id": "bb270eca-817c-44c0-a271-2933172cf4c7",
+            "organizationId": "75a6d9fa-577b-4eda-81d0-bfe86754f1b3",
+            "role": "ADMIN",
+            "name": "隔离机构管理员",
+            "phone": "13802590998",
+            "mustChangePassword": "[REDACTED]"
+          }
+        }
+      },
+      "requestId": "req-g",
+      "durationMs": 32
+    },
+    {
+      "name": "隔离机构管理员首次改密前禁止业务",
+      "method": "GET",
+      "path": "/admin/campuses",
+      "expectedStatus": [
+        403
+      ],
+      "actualStatus": 403,
+      "expectedErrorCode": "PASSWORD_CHANGE_REQUIRED",
+      "actualErrorCode": "PASSWORD_CHANGE_REQUIRED",
+      "passed": true,
+      "response": {
+        "error": {
+          "code": "PASSWORD_CHANGE_REQUIRED",
+          "message": "首次登录或密码重置后必须修改密码"
+        },
+        "requestId": "req-h"
+      },
+      "requestId": "req-h",
+      "durationMs": 3
+    },
+    {
+      "name": "隔离机构管理员首次修改密码",
+      "method": "POST",
+      "path": "/auth/change-password",
+      "expectedStatus": [
+        204
+      ],
+      "actualStatus": 204,
+      "passed": true,
+      "request": {
+        "currentPassword": "[REDACTED]",
+        "newPassword": "[REDACTED]"
+      },
+      "response": null,
+      "requestId": "req-i",
+      "durationMs": 79
+    },
+    {
+      "name": "隔离机构管理员改密后登录",
+      "method": "POST",
+      "path": "/auth/admin/login",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "request": {
+        "organizationCode": "ISO02590998",
+        "phone": "13802590998",
+        "password": "[REDACTED]"
+      },
+      "response": {
+        "data": {
+          "accessToken": "[REDACTED]",
+          "refreshToken": "[REDACTED]",
+          "accessTokenExpiresIn": "[REDACTED]",
+          "user": {
+            "id": "bb270eca-817c-44c0-a271-2933172cf4c7",
+            "organizationId": "75a6d9fa-577b-4eda-81d0-bfe86754f1b3",
+            "role": "ADMIN",
+            "name": "隔离机构管理员",
+            "phone": "13802590998",
+            "mustChangePassword": "[REDACTED]"
+          }
+        }
+      },
+      "requestId": "req-j",
+      "durationMs": 33
+    },
+    {
+      "name": "机构编码唯一性",
+      "method": "POST",
+      "path": "/platform/organizations",
+      "expectedStatus": [
+        400,
+        409
+      ],
+      "actualStatus": 409,
+      "actualErrorCode": "DUPLICATE_RESOURCE",
+      "passed": true,
+      "request": {
+        "code": "BD",
+        "name": "重复机构"
+      },
+      "response": {
+        "error": {
+          "code": "DUPLICATE_RESOURCE",
+          "message": "编码、手机号或账号已存在"
+        },
+        "requestId": "req-k"
+      },
+      "requestId": "req-k",
+      "durationMs": 16
+    },
+    {
+      "name": "创建校区",
+      "method": "POST",
+      "path": "/admin/campuses",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "name": "中央校区",
+        "address": "测试路1号",
+        "timezone": "Asia/Shanghai"
+      },
+      "response": {
+        "data": {
+          "id": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+          "organizationId": "c101d97e-d961-410f-96fc-5f25613d39ac",
+          "name": "中央校区",
+          "address": "测试路1号",
+          "phone": null,
+          "timezone": "Asia/Shanghai",
+          "isActive": true,
+          "createdAt": "2026-09-11T04:56:31.610Z",
+          "updatedAt": "2026-09-11T04:56:31.610Z"
+        }
+      },
+      "requestId": "req-l",
+      "durationMs": 8
+    },
+    {
+      "name": "创建教室",
+      "method": "POST",
+      "path": "/admin/classrooms",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "name": "舞蹈教室",
+        "code": "A101",
+        "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+        "capacity": 2
+      },
+      "response": {
+        "data": {
+          "id": "f645739e-8cc1-4667-b992-bbf99150723b",
+          "organizationId": "c101d97e-d961-410f-96fc-5f25613d39ac",
+          "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+          "name": "舞蹈教室",
+          "code": "A101",
+          "capacity": 2,
+          "isActive": true,
+          "createdAt": "2026-09-11T04:56:31.617Z",
+          "updatedAt": "2026-09-11T04:56:31.617Z",
+          "campus": {
+            "name": "中央校区"
+          },
+          "campusName": "中央校区"
+        }
+      },
+      "requestId": "req-m",
+      "durationMs": 9
+    },
+    {
+      "name": "教室容量边界0",
+      "method": "POST",
+      "path": "/admin/classrooms",
+      "expectedStatus": [
+        400
+      ],
+      "actualStatus": 400,
+      "expectedErrorCode": "VALIDATION_ERROR",
+      "actualErrorCode": "VALIDATION_ERROR",
+      "passed": true,
+      "request": {
+        "name": "非法教室",
+        "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+        "capacity": 0
+      },
+      "response": {
+        "error": {
+          "code": "VALIDATION_ERROR",
+          "message": "教室容量必须为正整数"
+        },
+        "requestId": "req-n"
+      },
+      "requestId": "req-n",
+      "durationMs": 4
+    },
+    {
+      "name": "创建民族舞课程",
+      "method": "POST",
+      "path": "/admin/courses",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "name": "民族舞",
+        "code": "MZW",
+        "durationMinutes": 90
+      },
+      "response": {
+        "data": {
+          "id": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+          "organizationId": "c101d97e-d961-410f-96fc-5f25613d39ac",
+          "name": "民族舞",
+          "code": "MZW",
+          "durationMinutes": 90,
+          "description": null,
+          "isActive": true,
+          "createdAt": "2026-09-11T04:56:31.628Z",
+          "updatedAt": "2026-09-11T04:56:31.628Z"
+        }
+      },
+      "requestId": "req-o",
+      "durationMs": 5
+    },
+    {
+      "name": "创建钢琴课程",
+      "method": "POST",
+      "path": "/admin/courses",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "name": "钢琴",
+        "code": "GQ",
+        "durationMinutes": 60
+      },
+      "response": {
+        "data": {
+          "id": "db770ccc-39f2-44de-99fd-f7c69c23c4f6",
+          "organizationId": "c101d97e-d961-410f-96fc-5f25613d39ac",
+          "name": "钢琴",
+          "code": "GQ",
+          "durationMinutes": 60,
+          "description": null,
+          "isActive": true,
+          "createdAt": "2026-09-11T04:56:31.634Z",
+          "updatedAt": "2026-09-11T04:56:31.634Z"
+        }
+      },
+      "requestId": "req-p",
+      "durationMs": 5
+    },
+    {
+      "name": "创建书法课程",
+      "method": "POST",
+      "path": "/admin/courses",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "name": "书法",
+        "code": "SF",
+        "durationMinutes": 75
+      },
+      "response": {
+        "data": {
+          "id": "62211d60-b978-4a60-a79a-818394f497de",
+          "organizationId": "c101d97e-d961-410f-96fc-5f25613d39ac",
+          "name": "书法",
+          "code": "SF",
+          "durationMinutes": 75,
+          "description": null,
+          "isActive": true,
+          "createdAt": "2026-09-11T04:56:31.638Z",
+          "updatedAt": "2026-09-11T04:56:31.638Z"
+        }
+      },
+      "requestId": "req-q",
+      "durationMs": 5
+    },
+    {
+      "name": "创建画画课程",
+      "method": "POST",
+      "path": "/admin/courses",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "name": "画画",
+        "code": "HH",
+        "durationMinutes": 80
+      },
+      "response": {
+        "data": {
+          "id": "981f45ce-42c0-4f17-aadc-0ccb60a136d2",
+          "organizationId": "c101d97e-d961-410f-96fc-5f25613d39ac",
+          "name": "画画",
+          "code": "HH",
+          "durationMinutes": 80,
+          "description": null,
+          "isActive": true,
+          "createdAt": "2026-09-11T04:56:31.643Z",
+          "updatedAt": "2026-09-11T04:56:31.643Z"
+        }
+      },
+      "requestId": "req-r",
+      "durationMs": 4
+    },
+    {
+      "name": "创建教师",
+      "method": "POST",
+      "path": "/admin/teachers",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "name": "王老师",
+        "phone": "13702590998",
+        "specialty": "民族舞/钢琴"
+      },
+      "response": {
+        "data": {
+          "id": "2b0dd9a2-60a6-4172-acbc-f5b221294f28",
+          "name": "王老师",
+          "phone": "13702590998",
+          "email": null,
+          "specialty": "民族舞/钢琴",
+          "remark": null,
+          "isActive": true,
+          "createdAt": "2026-09-11T04:56:31.648Z",
+          "updatedAt": "2026-09-11T04:56:31.648Z"
+        }
+      },
+      "requestId": "req-s",
+      "durationMs": 5
+    },
+    {
+      "name": "创建冲突验证教师",
+      "method": "POST",
+      "path": "/admin/teachers",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "name": "赵老师",
+        "phone": "13502590998",
+        "specialty": "民族舞"
+      },
+      "response": {
+        "data": {
+          "id": "2b3672b2-1364-4ef1-8996-a50023b42415",
+          "name": "赵老师",
+          "phone": "13502590998",
+          "email": null,
+          "specialty": "民族舞",
+          "remark": null,
+          "isActive": true,
+          "createdAt": "2026-09-11T04:56:31.653Z",
+          "updatedAt": "2026-09-11T04:56:31.653Z"
+        }
+      },
+      "requestId": "req-t",
+      "durationMs": 5
+    },
+    {
+      "name": "创建权益生命周期验证教师",
+      "method": "POST",
+      "path": "/admin/teachers",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "name": "周老师",
+        "phone": "13402590998",
+        "specialty": "书法/画画"
+      },
+      "response": {
+        "data": {
+          "id": "ae2d657e-110b-4a89-bf50-3927c3599ec0",
+          "name": "周老师",
+          "phone": "13402590998",
+          "email": null,
+          "specialty": "书法/画画",
+          "remark": null,
+          "isActive": true,
+          "createdAt": "2026-09-11T04:56:31.656Z",
+          "updatedAt": "2026-09-11T04:56:31.656Z"
+        }
+      },
+      "requestId": "req-u",
+      "durationMs": 3
+    },
+    {
+      "name": "创建家长",
+      "method": "POST",
+      "path": "/admin/guardians",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "name": "李家长",
+        "phone": "13602590998"
+      },
+      "response": {
+        "data": {
+          "id": "73a14504-3d34-41c6-8ed2-bb3f61a0bf00",
+          "name": "李家长",
+          "phone": "13602590998",
+          "email": null,
+          "specialty": null,
+          "remark": null,
+          "isActive": true,
+          "createdAt": "2026-09-11T04:56:31.661Z",
+          "updatedAt": "2026-09-11T04:56:31.661Z"
+        }
+      },
+      "requestId": "req-v",
+      "durationMs": 5
+    },
+    {
+      "name": "创建学生一",
+      "method": "POST",
+      "path": "/admin/students",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "name": "学生甲",
+        "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+        "gender": "女",
+        "birthDate": "2018-06-01"
+      },
+      "response": {
+        "data": {
+          "id": "7cdc4680-2051-434b-a235-2c5692849461",
+          "organizationId": "c101d97e-d961-410f-96fc-5f25613d39ac",
+          "name": "学生甲",
+          "phone": null,
+          "gender": "女",
+          "birthDate": "2018-06-01T00:00:00.000Z",
+          "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+          "remark": null,
+          "isActive": true,
+          "createdAt": "2026-09-11T04:56:31.666Z",
+          "updatedAt": "2026-09-11T04:56:31.666Z",
+          "campus": {
+            "name": "中央校区"
+          },
+          "campusName": "中央校区",
+          "guardians": []
+        }
+      },
+      "requestId": "req-w",
+      "durationMs": 8
+    },
+    {
+      "name": "创建学生二",
+      "method": "POST",
+      "path": "/admin/students",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "name": "学生乙",
+        "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+        "gender": "男",
+        "birthDate": "2017-03-15"
+      },
+      "response": {
+        "data": {
+          "id": "96c7025b-5c07-44e2-8ff5-dac3a046a57a",
+          "organizationId": "c101d97e-d961-410f-96fc-5f25613d39ac",
+          "name": "学生乙",
+          "phone": null,
+          "gender": "男",
+          "birthDate": "2017-03-15T00:00:00.000Z",
+          "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+          "remark": null,
+          "isActive": true,
+          "createdAt": "2026-09-11T04:56:31.673Z",
+          "updatedAt": "2026-09-11T04:56:31.673Z",
+          "campus": {
+            "name": "中央校区"
+          },
+          "campusName": "中央校区",
+          "guardians": []
+        }
+      },
+      "requestId": "req-x",
+      "durationMs": 5
+    },
+    {
+      "name": "家长学生绑定",
+      "method": "PUT",
+      "path": "/admin/students/7cdc4680-2051-434b-a235-2c5692849461/guardians",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "request": {
+        "guardians": [
+          {
+            "guardianId": "73a14504-3d34-41c6-8ed2-bb3f61a0bf00",
+            "relationship": "母亲",
+            "isPrimary": true
+          }
+        ]
+      },
+      "response": {
+        "data": {
+          "id": "7cdc4680-2051-434b-a235-2c5692849461",
+          "organizationId": "c101d97e-d961-410f-96fc-5f25613d39ac",
+          "name": "学生甲",
+          "phone": null,
+          "gender": "女",
+          "birthDate": "2018-06-01T00:00:00.000Z",
+          "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+          "remark": null,
+          "isActive": true,
+          "createdAt": "2026-09-11T04:56:31.666Z",
+          "updatedAt": "2026-09-11T04:56:31.666Z",
+          "campus": {
+            "name": "中央校区"
+          },
+          "guardianLinks": [
+            {
+              "organizationId": "c101d97e-d961-410f-96fc-5f25613d39ac",
+              "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+              "guardianId": "73a14504-3d34-41c6-8ed2-bb3f61a0bf00",
+              "relationship": "母亲",
+              "isPrimary": true,
+              "createdAt": "2026-09-11T04:56:31.682Z",
+              "guardian": {
+                "id": "73a14504-3d34-41c6-8ed2-bb3f61a0bf00",
+                "name": "李家长",
+                "phone": "13602590998"
+              }
+            }
+          ],
+          "campusName": "中央校区",
+          "guardians": [
+            {
+              "id": "73a14504-3d34-41c6-8ed2-bb3f61a0bf00",
+              "name": "李家长",
+              "phone": "13602590998",
+              "relationship": "母亲",
+              "isPrimary": true
+            }
+          ]
+        }
+      },
+      "requestId": "req-y",
+      "durationMs": 10
+    },
+    {
+      "name": "主要监护人边界",
+      "method": "PUT",
+      "path": "/admin/students/7cdc4680-2051-434b-a235-2c5692849461/guardians",
+      "expectedStatus": [
+        400
+      ],
+      "actualStatus": 400,
+      "expectedErrorCode": "VALIDATION_ERROR",
+      "actualErrorCode": "VALIDATION_ERROR",
+      "passed": true,
+      "request": {
+        "guardians": [
+          {
+            "guardianId": "73a14504-3d34-41c6-8ed2-bb3f61a0bf00",
+            "relationship": "母亲",
+            "isPrimary": true
+          },
+          {
+            "guardianId": "73a14504-3d34-41c6-8ed2-bb3f61a0bf00",
+            "relationship": "监护人",
+            "isPrimary": true
+          }
+        ]
+      },
+      "response": {
+        "error": {
+          "code": "VALIDATION_ERROR",
+          "message": "只能设置一位主要监护人"
+        },
+        "requestId": "req-z"
+      },
+      "requestId": "req-z",
+      "durationMs": 3
+    },
+    {
+      "name": "课包创建",
+      "method": "POST",
+      "path": "/admin/course-packages",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+        "name": "民族舞10次课",
+        "description": "白盒E2E",
+        "creditCount": 10,
+        "validityMonths": 12,
+        "priceCents": 168000,
+        "absentDeductsCredit": true,
+        "lateCancellationDeductsCredit": true,
+        "status": "DRAFT"
+      },
+      "response": {
+        "data": {
+          "id": "7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+          "version": 0,
+          "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+          "name": "民族舞10次课",
+          "description": "白盒E2E",
+          "creditCount": 10,
+          "validityMonths": 12,
+          "priceCents": 168000,
+          "absentDeductsCredit": true,
+          "lateCancellationDeductsCredit": true,
+          "status": "DRAFT",
+          "createdAt": "2026-09-11T04:56:31.693Z",
+          "updatedAt": "2026-09-11T04:56:31.693Z",
+          "courseName": "民族舞",
+          "soldCount": 0
+        }
+      },
+      "requestId": "req-10",
+      "durationMs": 10
+    },
+    {
+      "name": "课包读取",
+      "method": "GET",
+      "path": "/admin/course-packages/7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "response": {
+        "data": {
+          "id": "7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+          "version": 0,
+          "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+          "name": "民族舞10次课",
+          "description": "白盒E2E",
+          "creditCount": 10,
+          "validityMonths": 12,
+          "priceCents": 168000,
+          "absentDeductsCredit": true,
+          "lateCancellationDeductsCredit": true,
+          "status": "DRAFT",
+          "createdAt": "2026-09-11T04:56:31.693Z",
+          "updatedAt": "2026-09-11T04:56:31.693Z",
+          "courseName": "民族舞",
+          "soldCount": 0
+        }
+      },
+      "requestId": "req-11",
+      "durationMs": 6
+    },
+    {
+      "name": "课包更新",
+      "method": "PATCH",
+      "path": "/admin/course-packages/7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "request": {
+        "description": "更新后",
+        "priceCents": 169000
+      },
+      "response": {
+        "data": {
+          "id": "7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+          "version": 1,
+          "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+          "name": "民族舞10次课",
+          "description": "更新后",
+          "creditCount": 10,
+          "validityMonths": 12,
+          "priceCents": 169000,
+          "absentDeductsCredit": true,
+          "lateCancellationDeductsCredit": true,
+          "status": "DRAFT",
+          "createdAt": "2026-09-11T04:56:31.693Z",
+          "updatedAt": "2026-09-11T04:56:31.709Z",
+          "courseName": "民族舞",
+          "soldCount": 0
+        }
+      },
+      "requestId": "req-12",
+      "durationMs": 9
+    },
+    {
+      "name": "课包激活",
+      "method": "PATCH",
+      "path": "/admin/course-packages/7a078bc9-629d-41a8-8b03-b7f1e06d8389/status",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "request": {
+        "status": "ACTIVE"
+      },
+      "response": {
+        "data": {
+          "id": "7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+          "version": 2,
+          "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+          "name": "民族舞10次课",
+          "description": "更新后",
+          "creditCount": 10,
+          "validityMonths": 12,
+          "priceCents": 169000,
+          "absentDeductsCredit": true,
+          "lateCancellationDeductsCredit": true,
+          "status": "ACTIVE",
+          "createdAt": "2026-09-11T04:56:31.693Z",
+          "updatedAt": "2026-09-11T04:56:31.718Z",
+          "courseName": "民族舞",
+          "soldCount": 0
+        }
+      },
+      "requestId": "req-13",
+      "durationMs": 8
+    },
+    {
+      "name": "课包不提供删除（使用停售替代）",
+      "method": "DELETE",
+      "path": "/admin/course-packages/7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+      "expectedStatus": [
+        404
+      ],
+      "actualStatus": 404,
+      "actualErrorCode": "RESOURCE_NOT_FOUND",
+      "passed": true,
+      "response": {
+        "error": {
+          "code": "RESOURCE_NOT_FOUND",
+          "message": "基础资料类型不存在"
+        },
+        "requestId": "req-14"
+      },
+      "requestId": "req-14",
+      "durationMs": 3
+    },
+    {
+      "name": "课包金额越界",
+      "method": "POST",
+      "path": "/admin/course-packages",
+      "expectedStatus": [
+        400
+      ],
+      "actualStatus": 400,
+      "actualErrorCode": "VALIDATION_ERROR",
+      "passed": true,
+      "request": {
+        "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+        "name": "越界-1789102590998-poff",
+        "description": "白盒E2E",
+        "creditCount": 10,
+        "validityMonths": 12,
+        "priceCents": 2147483648,
+        "absentDeductsCredit": true,
+        "lateCancellationDeductsCredit": true,
+        "status": "DRAFT"
+      },
+      "response": {
+        "error": {
+          "code": "VALIDATION_ERROR",
+          "message": "body/priceCents must be <= 2147483647"
+        },
+        "requestId": "req-15"
+      },
+      "requestId": "req-15",
+      "durationMs": 3
+    },
+    {
+      "name": "购买缺少幂等键",
+      "method": "POST",
+      "path": "/admin/course-package-purchases",
+      "expectedStatus": [
+        400
+      ],
+      "actualStatus": 400,
+      "expectedErrorCode": "IDEMPOTENCY_KEY_REQUIRED",
+      "actualErrorCode": "IDEMPOTENCY_KEY_REQUIRED",
+      "passed": true,
+      "request": {
+        "packageId": "7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+        "studentId": "7cdc4680-2051-434b-a235-2c5692849461"
+      },
+      "response": {
+        "error": {
+          "code": "IDEMPOTENCY_KEY_REQUIRED",
+          "message": "购买请求必须提供 Idempotency-Key"
+        },
+        "requestId": "req-16"
+      },
+      "requestId": "req-16",
+      "durationMs": 3
+    },
+    {
+      "name": "学生一购买课包",
+      "method": "POST",
+      "path": "/admin/course-package-purchases",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "packageId": "7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+        "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+        "paidAmountCents": 169000,
+        "note": "线下收款"
+      },
+      "response": {
+        "data": {
+          "purchase": {
+            "id": "505b2fd2-e7c8-4b89-85db-1e472d50d4d3",
+            "packageId": "7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+            "packageNameSnapshot": "民族舞10次课",
+            "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+            "courseNameSnapshot": "民族舞",
+            "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+            "creditCount": 10,
+            "validityMonths": 12,
+            "paidAmountCents": 169000,
+            "status": "PAID",
+            "purchasedAt": "2026-09-11T04:56:31.739Z",
+            "note": "线下收款",
+            "createdBy": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+            "idempotencyKey": "buy1-1789102590998-poff",
+            "requestFingerprint": "cbc93331f1e4dd27b680166eba536232390a0b7490b93e3115367b0282c1f0de",
+            "absentDeductsCreditSnapshot": true,
+            "lateCancellationDeductsCreditSnapshot": true,
+            "createdAt": "2026-09-11T04:56:31.739Z",
+            "updatedAt": "2026-09-11T04:56:31.739Z",
+            "studentName": "学生甲",
+            "entitlementId": "9b7748e2-9b81-4999-a366-9ce799d17368"
+          },
+          "entitlement": {
+            "id": "9b7748e2-9b81-4999-a366-9ce799d17368",
+            "purchaseId": "505b2fd2-e7c8-4b89-85db-1e472d50d4d3",
+            "packageId": "7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+            "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+            "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+            "totalCredits": 10,
+            "remainingCredits": 10,
+            "reservedCredits": 0,
+            "version": 0,
+            "validFrom": "2026-09-11T00:00:00.000Z",
+            "validUntil": "2027-09-11T00:00:00.000Z",
+            "status": "ACTIVE",
+            "createdAt": "2026-09-11T04:56:31.739Z",
+            "updatedAt": "2026-09-11T04:56:31.739Z",
+            "studentName": "学生甲",
+            "packageName": "民族舞10次课",
+            "courseName": "民族舞"
+          },
+          "alreadyPurchased": false
+        }
+      },
+      "requestId": "req-17",
+      "durationMs": 31
+    },
+    {
+      "name": "购买幂等重放",
+      "method": "POST",
+      "path": "/admin/course-package-purchases",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "request": {
+        "packageId": "7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+        "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+        "paidAmountCents": 169000,
+        "note": "线下收款"
+      },
+      "response": {
+        "data": {
+          "purchase": {
+            "id": "505b2fd2-e7c8-4b89-85db-1e472d50d4d3",
+            "packageId": "7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+            "packageNameSnapshot": "民族舞10次课",
+            "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+            "courseNameSnapshot": "民族舞",
+            "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+            "creditCount": 10,
+            "validityMonths": 12,
+            "paidAmountCents": 169000,
+            "status": "PAID",
+            "purchasedAt": "2026-09-11T04:56:31.739Z",
+            "note": "线下收款",
+            "createdBy": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+            "idempotencyKey": "buy1-1789102590998-poff",
+            "requestFingerprint": "cbc93331f1e4dd27b680166eba536232390a0b7490b93e3115367b0282c1f0de",
+            "absentDeductsCreditSnapshot": true,
+            "lateCancellationDeductsCreditSnapshot": true,
+            "createdAt": "2026-09-11T04:56:31.739Z",
+            "updatedAt": "2026-09-11T04:56:31.739Z",
+            "studentName": "学生甲",
+            "entitlementId": "9b7748e2-9b81-4999-a366-9ce799d17368"
+          },
+          "entitlement": {
+            "id": "9b7748e2-9b81-4999-a366-9ce799d17368",
+            "purchaseId": "505b2fd2-e7c8-4b89-85db-1e472d50d4d3",
+            "packageId": "7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+            "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+            "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+            "totalCredits": 10,
+            "remainingCredits": 10,
+            "reservedCredits": 0,
+            "version": 0,
+            "validFrom": "2026-09-11T00:00:00.000Z",
+            "validUntil": "2027-09-11T00:00:00.000Z",
+            "status": "ACTIVE",
+            "createdAt": "2026-09-11T04:56:31.739Z",
+            "updatedAt": "2026-09-11T04:56:31.739Z",
+            "studentName": "学生甲",
+            "packageName": "民族舞10次课",
+            "courseName": "民族舞"
+          },
+          "alreadyPurchased": true
+        }
+      },
+      "requestId": "req-18",
+      "durationMs": 11
+    },
+    {
+      "name": "幂等键冲突",
+      "method": "POST",
+      "path": "/admin/course-package-purchases",
+      "expectedStatus": [
+        409
+      ],
+      "actualStatus": 409,
+      "expectedErrorCode": "IDEMPOTENCY_KEY_CONFLICT",
+      "actualErrorCode": "IDEMPOTENCY_KEY_CONFLICT",
+      "passed": true,
+      "request": {
+        "packageId": "7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+        "studentId": "96c7025b-5c07-44e2-8ff5-dac3a046a57a",
+        "paidAmountCents": 169000,
+        "note": "线下收款"
+      },
+      "response": {
+        "error": {
+          "code": "IDEMPOTENCY_KEY_CONFLICT",
+          "message": "幂等键已用于其他购买请求"
+        },
+        "requestId": "req-19"
+      },
+      "requestId": "req-19",
+      "durationMs": 8
+    },
+    {
+      "name": "学生二购买课包",
+      "method": "POST",
+      "path": "/admin/course-package-purchases",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "packageId": "7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+        "studentId": "96c7025b-5c07-44e2-8ff5-dac3a046a57a"
+      },
+      "response": {
+        "data": {
+          "purchase": {
+            "id": "b0c20479-4438-44c4-93ed-f7afd985981a",
+            "packageId": "7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+            "packageNameSnapshot": "民族舞10次课",
+            "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+            "courseNameSnapshot": "民族舞",
+            "studentId": "96c7025b-5c07-44e2-8ff5-dac3a046a57a",
+            "creditCount": 10,
+            "validityMonths": 12,
+            "paidAmountCents": 169000,
+            "status": "PAID",
+            "purchasedAt": "2026-09-11T04:56:31.787Z",
+            "note": null,
+            "createdBy": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+            "idempotencyKey": "buy2-1789102590998-poff",
+            "requestFingerprint": "63c76fe52745560f1a222285f5996adbeb4e2faade7b6b831c09ffb2e5837b4b",
+            "absentDeductsCreditSnapshot": true,
+            "lateCancellationDeductsCreditSnapshot": true,
+            "createdAt": "2026-09-11T04:56:31.787Z",
+            "updatedAt": "2026-09-11T04:56:31.787Z",
+            "studentName": "学生乙",
+            "entitlementId": "f489fd4f-da42-4ba6-b974-7d101f5653b7"
+          },
+          "entitlement": {
+            "id": "f489fd4f-da42-4ba6-b974-7d101f5653b7",
+            "purchaseId": "b0c20479-4438-44c4-93ed-f7afd985981a",
+            "packageId": "7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+            "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+            "studentId": "96c7025b-5c07-44e2-8ff5-dac3a046a57a",
+            "totalCredits": 10,
+            "remainingCredits": 10,
+            "reservedCredits": 0,
+            "version": 0,
+            "validFrom": "2026-09-11T00:00:00.000Z",
+            "validUntil": "2027-09-11T00:00:00.000Z",
+            "status": "ACTIVE",
+            "createdAt": "2026-09-11T04:56:31.787Z",
+            "updatedAt": "2026-09-11T04:56:31.787Z",
+            "studentName": "学生乙",
+            "packageName": "民族舞10次课",
+            "courseName": "民族舞"
+          },
+          "alreadyPurchased": false
+        }
+      },
+      "requestId": "req-1a",
+      "durationMs": 13
+    },
+    {
+      "name": "权益初始余额",
+      "method": "GET",
+      "path": "/admin/student-entitlements/9b7748e2-9b81-4999-a366-9ce799d17368",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "response": {
+        "data": {
+          "id": "9b7748e2-9b81-4999-a366-9ce799d17368",
+          "purchaseId": "505b2fd2-e7c8-4b89-85db-1e472d50d4d3",
+          "packageId": "7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+          "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+          "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+          "totalCredits": 10,
+          "remainingCredits": 10,
+          "reservedCredits": 0,
+          "version": 0,
+          "validFrom": "2026-09-11T00:00:00.000Z",
+          "validUntil": "2027-09-11T00:00:00.000Z",
+          "status": "ACTIVE",
+          "createdAt": "2026-09-11T04:56:31.739Z",
+          "updatedAt": "2026-09-11T04:56:31.739Z",
+          "studentName": "学生甲",
+          "packageName": "民族舞10次课",
+          "courseName": "民族舞"
+        }
+      },
+      "requestId": "req-1b",
+      "durationMs": 7
+    },
+    {
+      "name": "初始购买流水",
+      "method": "GET",
+      "path": "/admin/student-entitlements/9b7748e2-9b81-4999-a366-9ce799d17368/ledger",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "response": {
+        "data": {
+          "items": [
+            {
+              "id": "28e67538-a7a2-4461-b1c9-f0210d42457f",
+              "entitlementId": "9b7748e2-9b81-4999-a366-9ce799d17368",
+              "purchaseId": "505b2fd2-e7c8-4b89-85db-1e472d50d4d3",
+              "reservationId": null,
+              "bookingId": null,
+              "idempotencyKey": "purchase:buy1-1789102590998-poff",
+              "type": "PURCHASE",
+              "creditDelta": 10,
+              "balanceAfter": 10,
+              "reservedCreditDelta": 0,
+              "reservedBalanceAfter": 0,
+              "reversalOfId": null,
+              "actorId": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+              "note": "线下收款",
+              "occurredAt": "2026-09-11T04:56:31.739Z",
+              "createdAt": "2026-09-11T04:56:31.739Z"
+            }
+          ],
+          "page": 1,
+          "pageSize": 20,
+          "total": 1
+        }
+      },
+      "requestId": "req-1c",
+      "durationMs": 7
+    },
+    {
+      "name": "权益延期成功",
+      "method": "POST",
+      "path": "/admin/student-entitlements/9b7748e2-9b81-4999-a366-9ce799d17368/extensions",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "request": {
+        "months": 1,
+        "reason": "学员请假",
+        "version": 0
+      },
+      "response": {
+        "data": {
+          "id": "9b7748e2-9b81-4999-a366-9ce799d17368",
+          "purchaseId": "505b2fd2-e7c8-4b89-85db-1e472d50d4d3",
+          "packageId": "7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+          "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+          "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+          "totalCredits": 10,
+          "remainingCredits": 10,
+          "reservedCredits": 0,
+          "version": 1,
+          "validFrom": "2026-09-11T00:00:00.000Z",
+          "validUntil": "2027-10-11T00:00:00.000Z",
+          "status": "ACTIVE",
+          "createdAt": "2026-09-11T04:56:31.739Z",
+          "updatedAt": "2026-09-11T04:56:31.813Z",
+          "studentName": "学生甲",
+          "packageName": "民族舞10次课",
+          "courseName": "民族舞"
+        }
+      },
+      "requestId": "req-1d",
+      "durationMs": 13
+    },
+    {
+      "name": "权益延期版本冲突",
+      "method": "POST",
+      "path": "/admin/student-entitlements/9b7748e2-9b81-4999-a366-9ce799d17368/extensions",
+      "expectedStatus": [
+        409
+      ],
+      "actualStatus": 409,
+      "expectedErrorCode": "ENTITLEMENT_CONFLICT",
+      "actualErrorCode": "ENTITLEMENT_CONFLICT",
+      "passed": true,
+      "request": {
+        "months": 1,
+        "reason": "再次延期",
+        "version": 0
+      },
+      "response": {
+        "error": {
+          "code": "ENTITLEMENT_CONFLICT",
+          "message": "权益已被其他操作修改，请刷新后重试"
+        },
+        "requestId": "req-1e"
+      },
+      "requestId": "req-1e",
+      "durationMs": 5
+    },
+    {
+      "name": "权益延期原因空白",
+      "method": "POST",
+      "path": "/admin/student-entitlements/9b7748e2-9b81-4999-a366-9ce799d17368/extensions",
+      "expectedStatus": [
+        400
+      ],
+      "actualStatus": 400,
+      "expectedErrorCode": "EXTENSION_REASON_REQUIRED",
+      "actualErrorCode": "EXTENSION_REASON_REQUIRED",
+      "passed": true,
+      "request": {
+        "months": 1,
+        "reason": "   ",
+        "version": 1
+      },
+      "response": {
+        "error": {
+          "code": "EXTENSION_REASON_REQUIRED",
+          "message": "延期原因不能为空"
+        },
+        "requestId": "req-1f"
+      },
+      "requestId": "req-1f",
+      "durationMs": 4
+    },
+    {
+      "name": "权益延期变更记录",
+      "method": "GET",
+      "path": "/admin/student-entitlements/9b7748e2-9b81-4999-a366-9ce799d17368/validity-changes",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "response": {
+        "data": {
+          "items": [
+            {
+              "id": "31def90d-e589-407a-8882-7dc3d23b74c2",
+              "entitlementId": "9b7748e2-9b81-4999-a366-9ce799d17368",
+              "previousValidUntil": "2027-09-11T00:00:00.000Z",
+              "newValidUntil": "2027-10-11T00:00:00.000Z",
+              "reason": "学员请假",
+              "changedBy": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+              "createdAt": "2026-09-11T04:56:31.813Z"
+            }
+          ],
+          "page": 1,
+          "pageSize": 20,
+          "total": 1
+        }
+      },
+      "requestId": "req-1g",
+      "durationMs": 10
+    },
+    {
+      "name": "购买历史过期权益",
+      "method": "POST",
+      "path": "/admin/course-package-purchases",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "packageId": "7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+        "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+        "purchasedAt": "2024-01-01T00:00:00.000Z",
+        "note": "历史购买"
+      },
+      "response": {
+        "data": {
+          "purchase": {
+            "id": "41425af9-4c3b-4035-82cd-bac0fcc435ac",
+            "packageId": "7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+            "packageNameSnapshot": "民族舞10次课",
+            "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+            "courseNameSnapshot": "民族舞",
+            "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+            "creditCount": 10,
+            "validityMonths": 12,
+            "paidAmountCents": 169000,
+            "status": "PAID",
+            "purchasedAt": "2024-01-01T00:00:00.000Z",
+            "note": "历史购买",
+            "createdBy": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+            "idempotencyKey": "expired-1789102590998-poff",
+            "requestFingerprint": "ed1d9e5010f84ba0fc60c3b340a5315331cc763cd4c3b462cc105f49f20ad7fb",
+            "absentDeductsCreditSnapshot": true,
+            "lateCancellationDeductsCreditSnapshot": true,
+            "createdAt": "2024-01-01T00:00:00.000Z",
+            "updatedAt": "2024-01-01T00:00:00.000Z",
+            "studentName": "学生甲",
+            "entitlementId": "fc19bd63-ea9b-44a2-91ba-345d694518dc"
+          },
+          "entitlement": {
+            "id": "fc19bd63-ea9b-44a2-91ba-345d694518dc",
+            "purchaseId": "41425af9-4c3b-4035-82cd-bac0fcc435ac",
+            "packageId": "7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+            "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+            "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+            "totalCredits": 10,
+            "remainingCredits": 10,
+            "reservedCredits": 0,
+            "version": 0,
+            "validFrom": "2024-01-01T00:00:00.000Z",
+            "validUntil": "2025-01-01T00:00:00.000Z",
+            "status": "EXPIRED",
+            "createdAt": "2024-01-01T00:00:00.000Z",
+            "updatedAt": "2024-01-01T00:00:00.000Z",
+            "studentName": "学生甲",
+            "packageName": "民族舞10次课",
+            "courseName": "民族舞"
+          },
+          "alreadyPurchased": false
+        }
+      },
+      "requestId": "req-1h",
+      "durationMs": 16
+    },
+    {
+      "name": "过期权益状态筛选边界",
+      "method": "GET",
+      "path": "/admin/student-entitlements?status=EXPIRED",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "response": {
+        "data": {
+          "items": [
+            {
+              "id": "fc19bd63-ea9b-44a2-91ba-345d694518dc",
+              "purchaseId": "41425af9-4c3b-4035-82cd-bac0fcc435ac",
+              "packageId": "7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+              "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+              "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+              "totalCredits": 10,
+              "remainingCredits": 10,
+              "reservedCredits": 0,
+              "version": 0,
+              "validFrom": "2024-01-01T00:00:00.000Z",
+              "validUntil": "2025-01-01T00:00:00.000Z",
+              "status": "EXPIRED",
+              "createdAt": "2024-01-01T00:00:00.000Z",
+              "updatedAt": "2024-01-01T00:00:00.000Z",
+              "studentName": "学生甲",
+              "packageName": "民族舞10次课",
+              "courseName": "民族舞"
+            }
+          ],
+          "page": 1,
+          "pageSize": 20,
+          "total": 1
+        }
+      },
+      "requestId": "req-1i",
+      "durationMs": 8
+    },
+    {
+      "name": "过期权益延期后恢复有效",
+      "method": "POST",
+      "path": "/admin/student-entitlements/fc19bd63-ea9b-44a2-91ba-345d694518dc/extensions",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "request": {
+        "months": 36,
+        "reason": "补偿延期",
+        "version": 0
+      },
+      "response": {
+        "data": {
+          "id": "fc19bd63-ea9b-44a2-91ba-345d694518dc",
+          "purchaseId": "41425af9-4c3b-4035-82cd-bac0fcc435ac",
+          "packageId": "7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+          "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+          "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+          "totalCredits": 10,
+          "remainingCredits": 10,
+          "reservedCredits": 0,
+          "version": 1,
+          "validFrom": "2024-01-01T00:00:00.000Z",
+          "validUntil": "2028-01-01T00:00:00.000Z",
+          "status": "ACTIVE",
+          "createdAt": "2024-01-01T00:00:00.000Z",
+          "updatedAt": "2026-09-11T04:56:31.869Z",
+          "studentName": "学生甲",
+          "packageName": "民族舞10次课",
+          "courseName": "民族舞"
+        }
+      },
+      "requestId": "req-1j",
+      "durationMs": 13
+    },
+    {
+      "name": "创建课次",
+      "method": "POST",
+      "path": "/sessions",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+        "courseName": "民族舞",
+        "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+        "campusName": "中央校区",
+        "classroomId": "f645739e-8cc1-4667-b992-bbf99150723b",
+        "classroomName": "舞蹈教室",
+        "teacherId": "2b0dd9a2-60a6-4172-acbc-f5b221294f28",
+        "teacherName": "王老师",
+        "startsAt": "2026-10-20T02:00:00.000Z",
+        "endsAt": "2026-10-20T03:30:00.000Z",
+        "capacity": 1,
+        "status": "PUBLISHED",
+        "bookingOpensAt": "2026-09-01T00:00:00.000Z",
+        "bookingClosesAt": "2026-10-20T01:00:00.000Z",
+        "cancelDeadlineAt": "2026-10-19T02:00:00.000Z"
+      },
+      "response": {
+        "data": {
+          "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+          "courseName": "民族舞",
+          "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+          "campusName": "中央校区",
+          "teacherId": "2b0dd9a2-60a6-4172-acbc-f5b221294f28",
+          "teacherName": "王老师",
+          "startsAt": "2026-10-20T02:00:00.000Z",
+          "endsAt": "2026-10-20T03:30:00.000Z",
+          "capacity": 1,
+          "classroomId": "f645739e-8cc1-4667-b992-bbf99150723b",
+          "classroomName": "舞蹈教室",
+          "status": "PUBLISHED",
+          "bookingOpensAt": "2026-09-01T00:00:00.000Z",
+          "bookingClosesAt": "2026-10-20T01:00:00.000Z",
+          "cancelDeadlineAt": "2026-10-19T02:00:00.000Z",
+          "id": "629db695-cf1a-4fef-b8f5-6834fc809989",
+          "seriesId": null,
+          "occurrenceIndex": null
+        }
+      },
+      "requestId": "req-1k",
+      "durationMs": 13
+    },
+    {
+      "name": "教师/教室排课冲突",
+      "method": "POST",
+      "path": "/sessions",
+      "expectedStatus": [
+        409
+      ],
+      "actualStatus": 409,
+      "expectedErrorCode": "SESSION_CONFLICT",
+      "actualErrorCode": "SESSION_CONFLICT",
+      "passed": true,
+      "request": {
+        "courseId": "db770ccc-39f2-44de-99fd-f7c69c23c4f6",
+        "courseName": "钢琴",
+        "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+        "campusName": "中央校区",
+        "classroomId": "f645739e-8cc1-4667-b992-bbf99150723b",
+        "classroomName": "舞蹈教室",
+        "teacherId": "2b0dd9a2-60a6-4172-acbc-f5b221294f28",
+        "teacherName": "王老师",
+        "startsAt": "2026-10-20T02:30:00.000Z",
+        "endsAt": "2026-10-20T03:00:00.000Z",
+        "capacity": 1,
+        "status": "PUBLISHED",
+        "bookingOpensAt": "2026-09-01T00:00:00.000Z",
+        "bookingClosesAt": "2026-10-20T01:00:00.000Z",
+        "cancelDeadlineAt": "2026-10-19T02:00:00.000Z"
+      },
+      "response": {
+        "error": {
+          "code": "SESSION_CONFLICT",
+          "message": "老师或教室在该时段已被占用",
+          "details": {
+            "conflicts": [
+              {
+                "sessionId": "629db695-cf1a-4fef-b8f5-6834fc809989",
+                "teacherConflict": true,
+                "classroomConflict": true
+              }
+            ]
+          }
+        },
+        "requestId": "req-1l"
+      },
+      "requestId": "req-1l",
+      "durationMs": 7
+    },
+    {
+      "name": "排课时间边界",
+      "method": "POST",
+      "path": "/sessions",
+      "expectedStatus": [
+        400
+      ],
+      "actualStatus": 400,
+      "expectedErrorCode": "INVALID_TIME_RANGE",
+      "actualErrorCode": "INVALID_TIME_RANGE",
+      "passed": true,
+      "request": {
+        "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+        "courseName": "民族舞",
+        "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+        "campusName": "中央校区",
+        "classroomId": "f645739e-8cc1-4667-b992-bbf99150723b",
+        "classroomName": "舞蹈教室",
+        "teacherId": "2b0dd9a2-60a6-4172-acbc-f5b221294f28",
+        "teacherName": "王老师",
+        "startsAt": "2026-10-21T03:00:00.000Z",
+        "endsAt": "2026-10-21T02:00:00.000Z",
+        "capacity": 1,
+        "status": "PUBLISHED",
+        "bookingOpensAt": "2026-09-01T00:00:00.000Z",
+        "bookingClosesAt": "2026-10-20T01:00:00.000Z",
+        "cancelDeadlineAt": "2026-10-19T02:00:00.000Z"
+      },
+      "response": {
+        "error": {
+          "code": "INVALID_TIME_RANGE",
+          "message": "结束时间必须晚于开始时间"
+        },
+        "requestId": "req-1m"
+      },
+      "requestId": "req-1m",
+      "durationMs": 3
+    },
+    {
+      "name": "预约学生一",
+      "method": "POST",
+      "path": "/admin/bookings",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "sessionId": "629db695-cf1a-4fef-b8f5-6834fc809989",
+        "studentId": "7cdc4680-2051-434b-a235-2c5692849461"
+      },
+      "response": {
+        "data": {
+          "booking": {
+            "id": "ad063b68-d9ec-4ac5-9e24-7c0520cd230c",
+            "sessionId": "629db695-cf1a-4fef-b8f5-6834fc809989",
+            "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+            "entitlementId": "9b7748e2-9b81-4999-a366-9ce799d17368",
+            "status": "CONFIRMED",
+            "createdAt": "2026-09-11T04:56:31.912Z"
+          },
+          "alreadyBooked": false
+        }
+      },
+      "requestId": "req-1n",
+      "durationMs": 35
+    },
+    {
+      "name": "重复预约幂等",
+      "method": "POST",
+      "path": "/admin/bookings",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "request": {
+        "sessionId": "629db695-cf1a-4fef-b8f5-6834fc809989",
+        "studentId": "7cdc4680-2051-434b-a235-2c5692849461"
+      },
+      "response": {
+        "data": {
+          "booking": {
+            "id": "ad063b68-d9ec-4ac5-9e24-7c0520cd230c",
+            "sessionId": "629db695-cf1a-4fef-b8f5-6834fc809989",
+            "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+            "entitlementId": "9b7748e2-9b81-4999-a366-9ce799d17368",
+            "status": "CONFIRMED",
+            "createdAt": "2026-09-11T04:56:31.912Z"
+          },
+          "alreadyBooked": true
+        }
+      },
+      "requestId": "req-1o",
+      "durationMs": 12
+    },
+    {
+      "name": "容量已满",
+      "method": "POST",
+      "path": "/admin/bookings",
+      "expectedStatus": [
+        409
+      ],
+      "actualStatus": 409,
+      "expectedErrorCode": "SESSION_FULL",
+      "actualErrorCode": "SESSION_FULL",
+      "passed": true,
+      "request": {
+        "sessionId": "629db695-cf1a-4fef-b8f5-6834fc809989",
+        "studentId": "96c7025b-5c07-44e2-8ff5-dac3a046a57a"
+      },
+      "response": {
+        "error": {
+          "code": "SESSION_FULL",
+          "message": "课次名额已满"
+        },
+        "requestId": "req-1p"
+      },
+      "requestId": "req-1p",
+      "durationMs": 9
+    },
+    {
+      "name": "取消原因空白",
+      "method": "POST",
+      "path": "/admin/bookings/ad063b68-d9ec-4ac5-9e24-7c0520cd230c/cancel",
+      "expectedStatus": [
+        400
+      ],
+      "actualStatus": 400,
+      "expectedErrorCode": "CANCELLATION_REASON_REQUIRED",
+      "actualErrorCode": "CANCELLATION_REASON_REQUIRED",
+      "passed": true,
+      "request": {
+        "reason": "   "
+      },
+      "response": {
+        "error": {
+          "code": "CANCELLATION_REASON_REQUIRED",
+          "message": "代取消必须填写原因"
+        },
+        "requestId": "req-1q"
+      },
+      "requestId": "req-1q",
+      "durationMs": 3
+    },
+    {
+      "name": "取消预约释放容量与权益",
+      "method": "POST",
+      "path": "/admin/bookings/ad063b68-d9ec-4ac5-9e24-7c0520cd230c/cancel",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "request": {
+        "reason": "家长来电"
+      },
+      "response": {
+        "data": {
+          "id": "ad063b68-d9ec-4ac5-9e24-7c0520cd230c",
+          "sessionId": "629db695-cf1a-4fef-b8f5-6834fc809989",
+          "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+          "entitlementId": "9b7748e2-9b81-4999-a366-9ce799d17368",
+          "status": "CANCELLED",
+          "createdAt": "2026-09-11T04:56:31.912Z"
+        }
+      },
+      "requestId": "req-1r",
+      "durationMs": 24
+    },
+    {
+      "name": "取消后学生二预约",
+      "method": "POST",
+      "path": "/admin/bookings",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "sessionId": "629db695-cf1a-4fef-b8f5-6834fc809989",
+        "studentId": "96c7025b-5c07-44e2-8ff5-dac3a046a57a"
+      },
+      "response": {
+        "data": {
+          "booking": {
+            "id": "cf3573d5-9f07-4333-b9a8-d07a1a31fb90",
+            "sessionId": "629db695-cf1a-4fef-b8f5-6834fc809989",
+            "studentId": "96c7025b-5c07-44e2-8ff5-dac3a046a57a",
+            "entitlementId": "f489fd4f-da42-4ba6-b974-7d101f5653b7",
+            "status": "CONFIRMED",
+            "createdAt": "2026-09-11T04:56:31.990Z"
+          },
+          "alreadyBooked": false
+        }
+      },
+      "requestId": "req-1s",
+      "durationMs": 22
+    },
+    {
+      "name": "创建学生时间冲突目标课次",
+      "method": "POST",
+      "path": "/sessions",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+        "courseName": "民族舞",
+        "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+        "campusName": "中央校区",
+        "classroomId": null,
+        "classroomName": null,
+        "teacherId": "2b3672b2-1364-4ef1-8996-a50023b42415",
+        "teacherName": "赵老师",
+        "startsAt": "2026-10-20T02:30:00.000Z",
+        "endsAt": "2026-10-20T03:00:00.000Z",
+        "capacity": 5,
+        "status": "PUBLISHED",
+        "bookingOpensAt": "2026-09-01T00:00:00.000Z",
+        "bookingClosesAt": "2026-10-20T01:00:00.000Z",
+        "cancelDeadlineAt": "2026-10-19T02:00:00.000Z"
+      },
+      "response": {
+        "data": {
+          "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+          "courseName": "民族舞",
+          "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+          "campusName": "中央校区",
+          "teacherId": "2b3672b2-1364-4ef1-8996-a50023b42415",
+          "teacherName": "赵老师",
+          "startsAt": "2026-10-20T02:30:00.000Z",
+          "endsAt": "2026-10-20T03:00:00.000Z",
+          "capacity": 5,
+          "classroomId": null,
+          "classroomName": null,
+          "status": "PUBLISHED",
+          "bookingOpensAt": "2026-09-01T00:00:00.000Z",
+          "bookingClosesAt": "2026-10-20T01:00:00.000Z",
+          "cancelDeadlineAt": "2026-10-19T02:00:00.000Z",
+          "id": "29ed501c-2795-4aef-975c-f104df6f43ed",
+          "seriesId": null,
+          "occurrenceIndex": null
+        }
+      },
+      "requestId": "req-1t",
+      "durationMs": 8
+    },
+    {
+      "name": "学生预约时间冲突",
+      "method": "POST",
+      "path": "/admin/bookings",
+      "expectedStatus": [
+        409
+      ],
+      "actualStatus": 409,
+      "expectedErrorCode": "STUDENT_TIME_CONFLICT",
+      "actualErrorCode": "STUDENT_TIME_CONFLICT",
+      "passed": true,
+      "request": {
+        "sessionId": "29ed501c-2795-4aef-975c-f104df6f43ed",
+        "studentId": "96c7025b-5c07-44e2-8ff5-dac3a046a57a"
+      },
+      "response": {
+        "error": {
+          "code": "STUDENT_TIME_CONFLICT",
+          "message": "学生已有时间重叠的预约",
+          "details": {
+            "conflictingSessionId": "629db695-cf1a-4fef-b8f5-6834fc809989"
+          }
+        },
+        "requestId": "req-1u"
+      },
+      "requestId": "req-1u",
+      "durationMs": 10
+    },
+    {
+      "name": "签到",
+      "method": "PUT",
+      "path": "/sessions/629db695-cf1a-4fef-b8f5-6834fc809989/attendance",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "request": {
+        "records": [
+          {
+            "bookingId": "cf3573d5-9f07-4333-b9a8-d07a1a31fb90",
+            "status": "ATTENDED"
+          }
+        ]
+      },
+      "response": {
+        "data": [
+          {
+            "id": "cf3573d5-9f07-4333-b9a8-d07a1a31fb90",
+            "sessionId": "629db695-cf1a-4fef-b8f5-6834fc809989",
+            "studentId": "96c7025b-5c07-44e2-8ff5-dac3a046a57a",
+            "entitlementId": "f489fd4f-da42-4ba6-b974-7d101f5653b7",
+            "status": "ATTENDED",
+            "createdAt": "2026-09-11T04:56:31.990Z"
+          }
+        ]
+      },
+      "requestId": "req-1v",
+      "durationMs": 19
+    },
+    {
+      "name": "签到状态非法",
+      "method": "PUT",
+      "path": "/sessions/629db695-cf1a-4fef-b8f5-6834fc809989/attendance",
+      "expectedStatus": [
+        400
+      ],
+      "actualStatus": 400,
+      "actualErrorCode": "VALIDATION_ERROR",
+      "passed": true,
+      "request": {
+        "records": [
+          {
+            "bookingId": "cf3573d5-9f07-4333-b9a8-d07a1a31fb90",
+            "status": "INVALID"
+          }
+        ]
+      },
+      "response": {
+        "error": {
+          "code": "VALIDATION_ERROR",
+          "message": "body/records/0/status must be equal to one of the allowed values"
+        },
+        "requestId": "req-1w"
+      },
+      "requestId": "req-1w",
+      "durationMs": 3
+    },
+    {
+      "name": "创建钢琴单次课包",
+      "method": "POST",
+      "path": "/admin/course-packages",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "courseId": "db770ccc-39f2-44de-99fd-f7c69c23c4f6",
+        "name": "钢琴单次课包",
+        "description": "已用完权益边界验证",
+        "creditCount": 1,
+        "validityMonths": 12,
+        "priceCents": 20000,
+        "status": "ACTIVE"
+      },
+      "response": {
+        "data": {
+          "id": "5dc14a2e-31e0-4677-9413-62910dbf29af",
+          "version": 0,
+          "courseId": "db770ccc-39f2-44de-99fd-f7c69c23c4f6",
+          "name": "钢琴单次课包",
+          "description": "已用完权益边界验证",
+          "creditCount": 1,
+          "validityMonths": 12,
+          "priceCents": 20000,
+          "absentDeductsCredit": false,
+          "lateCancellationDeductsCredit": false,
+          "status": "ACTIVE",
+          "createdAt": "2026-09-11T04:56:32.048Z",
+          "updatedAt": "2026-09-11T04:56:32.048Z",
+          "courseName": "钢琴",
+          "soldCount": 0
+        }
+      },
+      "requestId": "req-1x",
+      "durationMs": 8
+    },
+    {
+      "name": "购买钢琴单次课包",
+      "method": "POST",
+      "path": "/admin/course-package-purchases",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "packageId": "5dc14a2e-31e0-4677-9413-62910dbf29af",
+        "studentId": "7cdc4680-2051-434b-a235-2c5692849461"
+      },
+      "response": {
+        "data": {
+          "purchase": {
+            "id": "2bbb0171-104b-4c92-b19d-330cb194afb0",
+            "packageId": "5dc14a2e-31e0-4677-9413-62910dbf29af",
+            "packageNameSnapshot": "钢琴单次课包",
+            "courseId": "db770ccc-39f2-44de-99fd-f7c69c23c4f6",
+            "courseNameSnapshot": "钢琴",
+            "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+            "creditCount": 1,
+            "validityMonths": 12,
+            "paidAmountCents": 20000,
+            "status": "PAID",
+            "purchasedAt": "2026-09-11T04:56:32.061Z",
+            "note": null,
+            "createdBy": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+            "idempotencyKey": "single-credit-1789102590998-poff",
+            "requestFingerprint": "c617a855d7ab2730ab6f6331c350ff9c0da8414df2129d1ee8d0436dcef8bb57",
+            "absentDeductsCreditSnapshot": false,
+            "lateCancellationDeductsCreditSnapshot": false,
+            "createdAt": "2026-09-11T04:56:32.061Z",
+            "updatedAt": "2026-09-11T04:56:32.061Z",
+            "studentName": "学生甲",
+            "entitlementId": "5868a732-e4ea-4e67-b007-e7e7d81eb0db"
+          },
+          "entitlement": {
+            "id": "5868a732-e4ea-4e67-b007-e7e7d81eb0db",
+            "purchaseId": "2bbb0171-104b-4c92-b19d-330cb194afb0",
+            "packageId": "5dc14a2e-31e0-4677-9413-62910dbf29af",
+            "courseId": "db770ccc-39f2-44de-99fd-f7c69c23c4f6",
+            "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+            "totalCredits": 1,
+            "remainingCredits": 1,
+            "reservedCredits": 0,
+            "version": 0,
+            "validFrom": "2026-09-11T00:00:00.000Z",
+            "validUntil": "2027-09-11T00:00:00.000Z",
+            "status": "ACTIVE",
+            "createdAt": "2026-09-11T04:56:32.061Z",
+            "updatedAt": "2026-09-11T04:56:32.061Z",
+            "studentName": "学生甲",
+            "packageName": "钢琴单次课包",
+            "courseName": "钢琴"
+          },
+          "alreadyPurchased": false
+        }
+      },
+      "requestId": "req-1y",
+      "durationMs": 16
+    },
+    {
+      "name": "创建钢琴已用完边界课次",
+      "method": "POST",
+      "path": "/sessions",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "courseId": "db770ccc-39f2-44de-99fd-f7c69c23c4f6",
+        "courseName": "钢琴",
+        "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+        "campusName": "中央校区",
+        "classroomId": "f645739e-8cc1-4667-b992-bbf99150723b",
+        "classroomName": "舞蹈教室",
+        "teacherId": "2b0dd9a2-60a6-4172-acbc-f5b221294f28",
+        "teacherName": "王老师",
+        "startsAt": "2026-10-23T02:00:00.000Z",
+        "endsAt": "2026-10-23T03:00:00.000Z",
+        "capacity": 2,
+        "status": "PUBLISHED",
+        "bookingOpensAt": "2026-09-01T00:00:00.000Z",
+        "bookingClosesAt": "2026-10-20T01:00:00.000Z",
+        "cancelDeadlineAt": "2026-10-19T02:00:00.000Z"
+      },
+      "response": {
+        "data": {
+          "courseId": "db770ccc-39f2-44de-99fd-f7c69c23c4f6",
+          "courseName": "钢琴",
+          "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+          "campusName": "中央校区",
+          "teacherId": "2b0dd9a2-60a6-4172-acbc-f5b221294f28",
+          "teacherName": "王老师",
+          "startsAt": "2026-10-23T02:00:00.000Z",
+          "endsAt": "2026-10-23T03:00:00.000Z",
+          "capacity": 2,
+          "classroomId": "f645739e-8cc1-4667-b992-bbf99150723b",
+          "classroomName": "舞蹈教室",
+          "status": "PUBLISHED",
+          "bookingOpensAt": "2026-09-01T00:00:00.000Z",
+          "bookingClosesAt": "2026-10-20T01:00:00.000Z",
+          "cancelDeadlineAt": "2026-10-19T02:00:00.000Z",
+          "id": "0c890f1e-39cb-4a02-9095-6f09c2c79e36",
+          "seriesId": null,
+          "occurrenceIndex": null
+        }
+      },
+      "requestId": "req-1z",
+      "durationMs": 8
+    },
+    {
+      "name": "预约并预占最后一个钢琴课时",
+      "method": "POST",
+      "path": "/admin/bookings",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "sessionId": "0c890f1e-39cb-4a02-9095-6f09c2c79e36",
+        "studentId": "7cdc4680-2051-434b-a235-2c5692849461"
+      },
+      "response": {
+        "data": {
+          "booking": {
+            "id": "2f383574-194f-4ae0-812f-89c2589a15e3",
+            "sessionId": "0c890f1e-39cb-4a02-9095-6f09c2c79e36",
+            "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+            "entitlementId": "5868a732-e4ea-4e67-b007-e7e7d81eb0db",
+            "status": "CONFIRMED",
+            "createdAt": "2026-09-11T04:56:32.084Z"
+          },
+          "alreadyBooked": false
+        }
+      },
+      "requestId": "req-20",
+      "durationMs": 18
+    },
+    {
+      "name": "签到用完钢琴权益",
+      "method": "PUT",
+      "path": "/sessions/0c890f1e-39cb-4a02-9095-6f09c2c79e36/attendance",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "request": {
+        "records": [
+          {
+            "bookingId": "2f383574-194f-4ae0-812f-89c2589a15e3",
+            "status": "ATTENDED"
+          }
+        ]
+      },
+      "response": {
+        "data": [
+          {
+            "id": "2f383574-194f-4ae0-812f-89c2589a15e3",
+            "sessionId": "0c890f1e-39cb-4a02-9095-6f09c2c79e36",
+            "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+            "entitlementId": "5868a732-e4ea-4e67-b007-e7e7d81eb0db",
+            "status": "ATTENDED",
+            "createdAt": "2026-09-11T04:56:32.084Z"
+          }
+        ]
+      },
+      "requestId": "req-21",
+      "durationMs": 14
+    },
+    {
+      "name": "已用完权益状态边界",
+      "method": "GET",
+      "path": "/admin/student-entitlements/5868a732-e4ea-4e67-b007-e7e7d81eb0db",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "response": {
+        "data": {
+          "id": "5868a732-e4ea-4e67-b007-e7e7d81eb0db",
+          "purchaseId": "2bbb0171-104b-4c92-b19d-330cb194afb0",
+          "packageId": "5dc14a2e-31e0-4677-9413-62910dbf29af",
+          "courseId": "db770ccc-39f2-44de-99fd-f7c69c23c4f6",
+          "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+          "totalCredits": 1,
+          "remainingCredits": 0,
+          "reservedCredits": 0,
+          "version": 2,
+          "validFrom": "2026-09-11T00:00:00.000Z",
+          "validUntil": "2027-09-11T00:00:00.000Z",
+          "status": "EXHAUSTED",
+          "createdAt": "2026-09-11T04:56:32.061Z",
+          "updatedAt": "2026-09-11T04:56:32.103Z",
+          "studentName": "学生甲",
+          "packageName": "钢琴单次课包",
+          "courseName": "钢琴"
+        }
+      },
+      "requestId": "req-22",
+      "durationMs": 5
+    },
+    {
+      "name": "已用完权益状态筛选边界",
+      "method": "GET",
+      "path": "/admin/student-entitlements?status=EXHAUSTED",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "response": {
+        "data": {
+          "items": [
+            {
+              "id": "5868a732-e4ea-4e67-b007-e7e7d81eb0db",
+              "purchaseId": "2bbb0171-104b-4c92-b19d-330cb194afb0",
+              "packageId": "5dc14a2e-31e0-4677-9413-62910dbf29af",
+              "courseId": "db770ccc-39f2-44de-99fd-f7c69c23c4f6",
+              "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+              "totalCredits": 1,
+              "remainingCredits": 0,
+              "reservedCredits": 0,
+              "version": 2,
+              "validFrom": "2026-09-11T00:00:00.000Z",
+              "validUntil": "2027-09-11T00:00:00.000Z",
+              "status": "EXHAUSTED",
+              "createdAt": "2026-09-11T04:56:32.061Z",
+              "updatedAt": "2026-09-11T04:56:32.103Z",
+              "studentName": "学生甲",
+              "packageName": "钢琴单次课包",
+              "courseName": "钢琴"
+            }
+          ],
+          "page": 1,
+          "pageSize": 20,
+          "total": 1
+        }
+      },
+      "requestId": "req-23",
+      "durationMs": 6
+    },
+    {
+      "name": "已用完权益延期仍保持已用完",
+      "method": "POST",
+      "path": "/admin/student-entitlements/5868a732-e4ea-4e67-b007-e7e7d81eb0db/extensions",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "request": {
+        "months": 1,
+        "reason": "保留权益记录",
+        "version": 2
+      },
+      "response": {
+        "data": {
+          "id": "5868a732-e4ea-4e67-b007-e7e7d81eb0db",
+          "purchaseId": "2bbb0171-104b-4c92-b19d-330cb194afb0",
+          "packageId": "5dc14a2e-31e0-4677-9413-62910dbf29af",
+          "courseId": "db770ccc-39f2-44de-99fd-f7c69c23c4f6",
+          "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+          "totalCredits": 1,
+          "remainingCredits": 0,
+          "reservedCredits": 0,
+          "version": 3,
+          "validFrom": "2026-09-11T00:00:00.000Z",
+          "validUntil": "2027-10-11T00:00:00.000Z",
+          "status": "EXHAUSTED",
+          "createdAt": "2026-09-11T04:56:32.061Z",
+          "updatedAt": "2026-09-11T04:56:32.124Z",
+          "studentName": "学生甲",
+          "packageName": "钢琴单次课包",
+          "courseName": "钢琴"
+        }
+      },
+      "requestId": "req-24",
+      "durationMs": 9
+    },
+    {
+      "name": "创建晚取消扣费课包",
+      "method": "POST",
+      "path": "/admin/course-packages",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "courseId": "62211d60-b978-4a60-a79a-818394f497de",
+        "name": "书法晚取消验证课包",
+        "description": "管理员晚取消真实API验证",
+        "creditCount": 2,
+        "validityMonths": 12,
+        "priceCents": 30000,
+        "absentDeductsCredit": true,
+        "lateCancellationDeductsCredit": true,
+        "status": "ACTIVE"
+      },
+      "response": {
+        "data": {
+          "id": "ebdd8b4f-04e1-4afd-a752-2965bebcedf0",
+          "version": 0,
+          "courseId": "62211d60-b978-4a60-a79a-818394f497de",
+          "name": "书法晚取消验证课包",
+          "description": "管理员晚取消真实API验证",
+          "creditCount": 2,
+          "validityMonths": 12,
+          "priceCents": 30000,
+          "absentDeductsCredit": true,
+          "lateCancellationDeductsCredit": true,
+          "status": "ACTIVE",
+          "createdAt": "2026-09-11T04:56:32.132Z",
+          "updatedAt": "2026-09-11T04:56:32.132Z",
+          "courseName": "书法",
+          "soldCount": 0
+        }
+      },
+      "requestId": "req-25",
+      "durationMs": 6
+    },
+    {
+      "name": "购买晚取消扣费课包",
+      "method": "POST",
+      "path": "/admin/course-package-purchases",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "packageId": "ebdd8b4f-04e1-4afd-a752-2965bebcedf0",
+        "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+        "purchasedAt": "2026-09-10T04:56:32.129Z"
+      },
+      "response": {
+        "data": {
+          "purchase": {
+            "id": "73036acc-5949-4ee2-93b7-3f3a6cce3255",
+            "packageId": "ebdd8b4f-04e1-4afd-a752-2965bebcedf0",
+            "packageNameSnapshot": "书法晚取消验证课包",
+            "courseId": "62211d60-b978-4a60-a79a-818394f497de",
+            "courseNameSnapshot": "书法",
+            "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+            "creditCount": 2,
+            "validityMonths": 12,
+            "paidAmountCents": 30000,
+            "status": "PAID",
+            "purchasedAt": "2026-09-10T04:56:32.129Z",
+            "note": null,
+            "createdBy": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+            "idempotencyKey": "late-cancel-1789102590998-poff",
+            "requestFingerprint": "d3f6184914293485d3fa75d784ed883e1f2c3521c39f470d9e799ba78d693984",
+            "absentDeductsCreditSnapshot": true,
+            "lateCancellationDeductsCreditSnapshot": true,
+            "createdAt": "2026-09-10T04:56:32.129Z",
+            "updatedAt": "2026-09-10T04:56:32.129Z",
+            "studentName": "学生甲",
+            "entitlementId": "f56d1580-3223-4435-bb0a-330a71c71651"
+          },
+          "entitlement": {
+            "id": "f56d1580-3223-4435-bb0a-330a71c71651",
+            "purchaseId": "73036acc-5949-4ee2-93b7-3f3a6cce3255",
+            "packageId": "ebdd8b4f-04e1-4afd-a752-2965bebcedf0",
+            "courseId": "62211d60-b978-4a60-a79a-818394f497de",
+            "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+            "totalCredits": 2,
+            "remainingCredits": 2,
+            "reservedCredits": 0,
+            "version": 0,
+            "validFrom": "2026-09-10T00:00:00.000Z",
+            "validUntil": "2027-09-10T00:00:00.000Z",
+            "status": "ACTIVE",
+            "createdAt": "2026-09-10T04:56:32.129Z",
+            "updatedAt": "2026-09-10T04:56:32.129Z",
+            "studentName": "学生甲",
+            "packageName": "书法晚取消验证课包",
+            "courseName": "书法"
+          },
+          "alreadyPurchased": false
+        }
+      },
+      "requestId": "req-26",
+      "durationMs": 11
+    },
+    {
+      "name": "创建超过取消截止时间的课次",
+      "method": "POST",
+      "path": "/sessions",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "courseId": "62211d60-b978-4a60-a79a-818394f497de",
+        "courseName": "书法",
+        "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+        "campusName": "中央校区",
+        "classroomId": null,
+        "classroomName": null,
+        "teacherId": "ae2d657e-110b-4a89-bf50-3927c3599ec0",
+        "teacherName": "周老师",
+        "startsAt": "2026-09-11T05:56:32.129Z",
+        "endsAt": "2026-09-11T06:56:32.129Z",
+        "capacity": 2,
+        "status": "PUBLISHED",
+        "bookingOpensAt": "2026-09-11T02:56:32.129Z",
+        "bookingClosesAt": "2026-09-11T05:26:32.129Z",
+        "cancelDeadlineAt": "2026-09-11T04:55:32.129Z"
+      },
+      "response": {
+        "data": {
+          "courseId": "62211d60-b978-4a60-a79a-818394f497de",
+          "courseName": "书法",
+          "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+          "campusName": "中央校区",
+          "teacherId": "ae2d657e-110b-4a89-bf50-3927c3599ec0",
+          "teacherName": "周老师",
+          "startsAt": "2026-09-11T05:56:32.129Z",
+          "endsAt": "2026-09-11T06:56:32.129Z",
+          "capacity": 2,
+          "classroomId": null,
+          "classroomName": null,
+          "status": "PUBLISHED",
+          "bookingOpensAt": "2026-09-11T02:56:32.129Z",
+          "bookingClosesAt": "2026-09-11T05:26:32.129Z",
+          "cancelDeadlineAt": "2026-09-11T04:55:32.129Z",
+          "id": "89da2e86-25cb-4603-bd27-b1f7b1c25050",
+          "seriesId": null,
+          "occurrenceIndex": null
+        }
+      },
+      "requestId": "req-27",
+      "durationMs": 7
+    },
+    {
+      "name": "管理员预约晚取消课次",
+      "method": "POST",
+      "path": "/admin/bookings",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "sessionId": "89da2e86-25cb-4603-bd27-b1f7b1c25050",
+        "studentId": "7cdc4680-2051-434b-a235-2c5692849461"
+      },
+      "response": {
+        "data": {
+          "booking": {
+            "id": "e3605b0d-864f-4926-97ce-183852dee7f4",
+            "sessionId": "89da2e86-25cb-4603-bd27-b1f7b1c25050",
+            "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+            "entitlementId": "f56d1580-3223-4435-bb0a-330a71c71651",
+            "status": "CONFIRMED",
+            "createdAt": "2026-09-11T04:56:32.158Z"
+          },
+          "alreadyBooked": false
+        }
+      },
+      "requestId": "req-28",
+      "durationMs": 17
+    },
+    {
+      "name": "晚取消前权益已预占",
+      "method": "GET",
+      "path": "/admin/student-entitlements/f56d1580-3223-4435-bb0a-330a71c71651",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "response": {
+        "data": {
+          "id": "f56d1580-3223-4435-bb0a-330a71c71651",
+          "purchaseId": "73036acc-5949-4ee2-93b7-3f3a6cce3255",
+          "packageId": "ebdd8b4f-04e1-4afd-a752-2965bebcedf0",
+          "courseId": "62211d60-b978-4a60-a79a-818394f497de",
+          "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+          "totalCredits": 2,
+          "remainingCredits": 2,
+          "reservedCredits": 1,
+          "version": 1,
+          "validFrom": "2026-09-10T00:00:00.000Z",
+          "validUntil": "2027-09-10T00:00:00.000Z",
+          "status": "ACTIVE",
+          "createdAt": "2026-09-10T04:56:32.129Z",
+          "updatedAt": "2026-09-11T04:56:32.158Z",
+          "studentName": "学生甲",
+          "packageName": "书法晚取消验证课包",
+          "courseName": "书法"
+        }
+      },
+      "requestId": "req-29",
+      "durationMs": 5
+    },
+    {
+      "name": "管理员晚于截止时间取消并扣费",
+      "method": "POST",
+      "path": "/admin/bookings/e3605b0d-864f-4926-97ce-183852dee7f4/cancel",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "request": {
+        "reason": "截止时间后代取消"
+      },
+      "response": {
+        "data": {
+          "id": "e3605b0d-864f-4926-97ce-183852dee7f4",
+          "sessionId": "89da2e86-25cb-4603-bd27-b1f7b1c25050",
+          "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+          "entitlementId": "f56d1580-3223-4435-bb0a-330a71c71651",
+          "status": "CANCELLED",
+          "createdAt": "2026-09-11T04:56:32.158Z"
+        }
+      },
+      "requestId": "req-2a",
+      "durationMs": 22
+    },
+    {
+      "name": "晚取消权益扣一且预占归零",
+      "method": "GET",
+      "path": "/admin/student-entitlements/f56d1580-3223-4435-bb0a-330a71c71651",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "response": {
+        "data": {
+          "id": "f56d1580-3223-4435-bb0a-330a71c71651",
+          "purchaseId": "73036acc-5949-4ee2-93b7-3f3a6cce3255",
+          "packageId": "ebdd8b4f-04e1-4afd-a752-2965bebcedf0",
+          "courseId": "62211d60-b978-4a60-a79a-818394f497de",
+          "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+          "totalCredits": 2,
+          "remainingCredits": 1,
+          "reservedCredits": 0,
+          "version": 2,
+          "validFrom": "2026-09-10T00:00:00.000Z",
+          "validUntil": "2027-09-10T00:00:00.000Z",
+          "status": "ACTIVE",
+          "createdAt": "2026-09-10T04:56:32.129Z",
+          "updatedAt": "2026-09-11T04:56:32.187Z",
+          "studentName": "学生甲",
+          "packageName": "书法晚取消验证课包",
+          "courseName": "书法"
+        }
+      },
+      "requestId": "req-2b",
+      "durationMs": 5
+    },
+    {
+      "name": "晚取消生成唯一CONSUME流水",
+      "method": "GET",
+      "path": "/admin/student-entitlements/f56d1580-3223-4435-bb0a-330a71c71651/ledger",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "response": {
+        "data": {
+          "items": [
+            {
+              "id": "6f664434-640c-49e1-b1ce-6375199fe0bb",
+              "entitlementId": "f56d1580-3223-4435-bb0a-330a71c71651",
+              "purchaseId": null,
+              "reservationId": "5173382e-67b7-46e2-bdc7-acdc22571f3a",
+              "bookingId": "e3605b0d-864f-4926-97ce-183852dee7f4",
+              "idempotencyKey": "booking:e3605b0d-864f-4926-97ce-183852dee7f4:consume:1789102592158",
+              "type": "CONSUME",
+              "creditDelta": -1,
+              "balanceAfter": 1,
+              "reservedCreditDelta": -1,
+              "reservedBalanceAfter": 0,
+              "reversalOfId": null,
+              "actorId": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+              "note": "管理员晚取消：截止时间后代取消",
+              "occurredAt": "2026-09-11T04:56:32.187Z",
+              "createdAt": "2026-09-11T04:56:32.187Z"
+            },
+            {
+              "id": "1f5c7d61-c0dd-4514-b8f5-da0d6e168fb3",
+              "entitlementId": "f56d1580-3223-4435-bb0a-330a71c71651",
+              "purchaseId": null,
+              "reservationId": "5173382e-67b7-46e2-bdc7-acdc22571f3a",
+              "bookingId": "e3605b0d-864f-4926-97ce-183852dee7f4",
+              "idempotencyKey": "booking:e3605b0d-864f-4926-97ce-183852dee7f4:reserve",
+              "type": "RESERVE",
+              "creditDelta": 0,
+              "balanceAfter": 2,
+              "reservedCreditDelta": 1,
+              "reservedBalanceAfter": 1,
+              "reversalOfId": null,
+              "actorId": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+              "note": null,
+              "occurredAt": "2026-09-11T04:56:32.158Z",
+              "createdAt": "2026-09-11T04:56:32.158Z"
+            },
+            {
+              "id": "f8cc5acc-23a4-4b9b-b300-144a613e5cb1",
+              "entitlementId": "f56d1580-3223-4435-bb0a-330a71c71651",
+              "purchaseId": "73036acc-5949-4ee2-93b7-3f3a6cce3255",
+              "reservationId": null,
+              "bookingId": null,
+              "idempotencyKey": "purchase:late-cancel-1789102590998-poff",
+              "type": "PURCHASE",
+              "creditDelta": 2,
+              "balanceAfter": 2,
+              "reservedCreditDelta": 0,
+              "reservedBalanceAfter": 0,
+              "reversalOfId": null,
+              "actorId": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+              "note": null,
+              "occurredAt": "2026-09-10T04:56:32.129Z",
+              "createdAt": "2026-09-10T04:56:32.129Z"
+            }
+          ],
+          "page": 1,
+          "pageSize": 20,
+          "total": 3
+        }
+      },
+      "requestId": "req-2c",
+      "durationMs": 6
+    },
+    {
+      "name": "晚取消reservation核销持久化",
+      "passed": true,
+      "evidence": {
+        "reservationStatus": "CONSUMED",
+        "consumeCount": 1,
+        "consumeDelta": -1
+      }
+    },
+    {
+      "name": "管理员重复晚取消幂等",
+      "method": "POST",
+      "path": "/admin/bookings/e3605b0d-864f-4926-97ce-183852dee7f4/cancel",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "request": {
+        "reason": "重复代取消"
+      },
+      "response": {
+        "data": {
+          "id": "e3605b0d-864f-4926-97ce-183852dee7f4",
+          "sessionId": "89da2e86-25cb-4603-bd27-b1f7b1c25050",
+          "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+          "entitlementId": "f56d1580-3223-4435-bb0a-330a71c71651",
+          "status": "CANCELLED",
+          "createdAt": "2026-09-11T04:56:32.158Z"
+        }
+      },
+      "requestId": "req-2d",
+      "durationMs": 7
+    },
+    {
+      "name": "重复晚取消不重复扣权益",
+      "method": "GET",
+      "path": "/admin/student-entitlements/f56d1580-3223-4435-bb0a-330a71c71651",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "response": {
+        "data": {
+          "id": "f56d1580-3223-4435-bb0a-330a71c71651",
+          "purchaseId": "73036acc-5949-4ee2-93b7-3f3a6cce3255",
+          "packageId": "ebdd8b4f-04e1-4afd-a752-2965bebcedf0",
+          "courseId": "62211d60-b978-4a60-a79a-818394f497de",
+          "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+          "totalCredits": 2,
+          "remainingCredits": 1,
+          "reservedCredits": 0,
+          "version": 2,
+          "validFrom": "2026-09-10T00:00:00.000Z",
+          "validUntil": "2027-09-10T00:00:00.000Z",
+          "status": "ACTIVE",
+          "createdAt": "2026-09-10T04:56:32.129Z",
+          "updatedAt": "2026-09-11T04:56:32.187Z",
+          "studentName": "学生甲",
+          "packageName": "书法晚取消验证课包",
+          "courseName": "书法"
+        }
+      },
+      "requestId": "req-2e",
+      "durationMs": 6
+    },
+    {
+      "name": "管理员重复晚取消数据库幂等",
+      "passed": true,
+      "evidence": {
+        "reservationStatus": "CONSUMED",
+        "consumeCount": 1,
+        "consumeDelta": -1
+      }
+    },
+    {
+      "name": "创建缺席扣费课包",
+      "method": "POST",
+      "path": "/admin/course-packages",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "courseId": "981f45ce-42c0-4f17-aadc-0ccb60a136d2",
+        "name": "画画缺席验证课包",
+        "description": "课次结束自动缺席真实API验证",
+        "creditCount": 2,
+        "validityMonths": 12,
+        "priceCents": 32000,
+        "absentDeductsCredit": true,
+        "lateCancellationDeductsCredit": false,
+        "status": "ACTIVE"
+      },
+      "response": {
+        "data": {
+          "id": "32951eac-d5fd-41f6-a2bc-e8ceecd77e18",
+          "version": 0,
+          "courseId": "981f45ce-42c0-4f17-aadc-0ccb60a136d2",
+          "name": "画画缺席验证课包",
+          "description": "课次结束自动缺席真实API验证",
+          "creditCount": 2,
+          "validityMonths": 12,
+          "priceCents": 32000,
+          "absentDeductsCredit": true,
+          "lateCancellationDeductsCredit": false,
+          "status": "ACTIVE",
+          "createdAt": "2026-09-11T04:56:32.314Z",
+          "updatedAt": "2026-09-11T04:56:32.314Z",
+          "courseName": "画画",
+          "soldCount": 0
+        }
+      },
+      "requestId": "req-2f",
+      "durationMs": 10
+    },
+    {
+      "name": "购买缺席扣费课包",
+      "method": "POST",
+      "path": "/admin/course-package-purchases",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "packageId": "32951eac-d5fd-41f6-a2bc-e8ceecd77e18",
+        "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+        "purchasedAt": "2026-09-10T04:56:32.129Z"
+      },
+      "response": {
+        "data": {
+          "purchase": {
+            "id": "eb9261fc-4ad6-4a06-a252-509c5b8c167d",
+            "packageId": "32951eac-d5fd-41f6-a2bc-e8ceecd77e18",
+            "packageNameSnapshot": "画画缺席验证课包",
+            "courseId": "981f45ce-42c0-4f17-aadc-0ccb60a136d2",
+            "courseNameSnapshot": "画画",
+            "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+            "creditCount": 2,
+            "validityMonths": 12,
+            "paidAmountCents": 32000,
+            "status": "PAID",
+            "purchasedAt": "2026-09-10T04:56:32.129Z",
+            "note": null,
+            "createdBy": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+            "idempotencyKey": "absent-worker-1789102590998-poff",
+            "requestFingerprint": "d1272fecdc629de93e4856a78e3dbe023485d3f53cfc8fc9c68853d0537513b8",
+            "absentDeductsCreditSnapshot": true,
+            "lateCancellationDeductsCreditSnapshot": false,
+            "createdAt": "2026-09-10T04:56:32.129Z",
+            "updatedAt": "2026-09-10T04:56:32.129Z",
+            "studentName": "学生甲",
+            "entitlementId": "05cd9414-4813-42e4-9402-796e465fd07d"
+          },
+          "entitlement": {
+            "id": "05cd9414-4813-42e4-9402-796e465fd07d",
+            "purchaseId": "eb9261fc-4ad6-4a06-a252-509c5b8c167d",
+            "packageId": "32951eac-d5fd-41f6-a2bc-e8ceecd77e18",
+            "courseId": "981f45ce-42c0-4f17-aadc-0ccb60a136d2",
+            "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+            "totalCredits": 2,
+            "remainingCredits": 2,
+            "reservedCredits": 0,
+            "version": 0,
+            "validFrom": "2026-09-10T00:00:00.000Z",
+            "validUntil": "2027-09-10T00:00:00.000Z",
+            "status": "ACTIVE",
+            "createdAt": "2026-09-10T04:56:32.129Z",
+            "updatedAt": "2026-09-10T04:56:32.129Z",
+            "studentName": "学生甲",
+            "packageName": "画画缺席验证课包",
+            "courseName": "画画"
+          },
+          "alreadyPurchased": false
+        }
+      },
+      "requestId": "req-2g",
+      "durationMs": 14
+    },
+    {
+      "name": "创建已结束课次供worker结算",
+      "method": "POST",
+      "path": "/sessions",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "courseId": "981f45ce-42c0-4f17-aadc-0ccb60a136d2",
+        "courseName": "画画",
+        "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+        "campusName": "中央校区",
+        "classroomId": null,
+        "classroomName": null,
+        "teacherId": "ae2d657e-110b-4a89-bf50-3927c3599ec0",
+        "teacherName": "周老师",
+        "startsAt": "2026-09-11T04:52:32.129Z",
+        "endsAt": "2026-09-11T04:54:32.129Z",
+        "capacity": 2,
+        "status": "PUBLISHED",
+        "bookingOpensAt": "2026-09-10T04:56:32.129Z",
+        "bookingClosesAt": "2026-09-11T04:51:32.129Z",
+        "cancelDeadlineAt": "2026-09-11T04:50:32.129Z"
+      },
+      "response": {
+        "data": {
+          "courseId": "981f45ce-42c0-4f17-aadc-0ccb60a136d2",
+          "courseName": "画画",
+          "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+          "campusName": "中央校区",
+          "teacherId": "ae2d657e-110b-4a89-bf50-3927c3599ec0",
+          "teacherName": "周老师",
+          "startsAt": "2026-09-11T04:52:32.129Z",
+          "endsAt": "2026-09-11T04:54:32.129Z",
+          "capacity": 2,
+          "classroomId": null,
+          "classroomName": null,
+          "status": "PUBLISHED",
+          "bookingOpensAt": "2026-09-10T04:56:32.129Z",
+          "bookingClosesAt": "2026-09-11T04:51:32.129Z",
+          "cancelDeadlineAt": "2026-09-11T04:50:32.129Z",
+          "id": "cd39484b-f39a-48c7-9257-436d90f2b350",
+          "seriesId": null,
+          "occurrenceIndex": null
+        }
+      },
+      "requestId": "req-2h",
+      "durationMs": 6
+    },
+    {
+      "name": "管理员预约已结束课次",
+      "method": "POST",
+      "path": "/admin/bookings",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "sessionId": "cd39484b-f39a-48c7-9257-436d90f2b350",
+        "studentId": "7cdc4680-2051-434b-a235-2c5692849461"
+      },
+      "response": {
+        "data": {
+          "booking": {
+            "id": "0d711552-32d9-466a-b4c2-0a1205335743",
+            "sessionId": "cd39484b-f39a-48c7-9257-436d90f2b350",
+            "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+            "entitlementId": "05cd9414-4813-42e4-9402-796e465fd07d",
+            "status": "CONFIRMED",
+            "createdAt": "2026-09-11T04:56:32.346Z"
+          },
+          "alreadyBooked": false
+        }
+      },
+      "requestId": "req-2i",
+      "durationMs": 21
+    },
+    {
+      "name": "15秒内轮询worker自动标记缺席",
+      "passed": true,
+      "evidence": {
+        "status": "ABSENT",
+        "attempts": 10,
+        "elapsedMs": 9207
+      }
+    },
+    {
+      "name": "worker后预约状态为ABSENT",
+      "method": "GET",
+      "path": "/admin/bookings?sessionId=cd39484b-f39a-48c7-9257-436d90f2b350",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "response": {
+        "data": {
+          "items": [
+            {
+              "id": "0d711552-32d9-466a-b4c2-0a1205335743",
+              "sessionId": "cd39484b-f39a-48c7-9257-436d90f2b350",
+              "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+              "entitlementId": "05cd9414-4813-42e4-9402-796e465fd07d",
+              "status": "ABSENT",
+              "createdAt": "2026-09-11T04:56:32.346Z",
+              "session": {
+                "id": "cd39484b-f39a-48c7-9257-436d90f2b350",
+                "courseId": "981f45ce-42c0-4f17-aadc-0ccb60a136d2",
+                "courseName": "画画",
+                "startsAt": "2026-09-11T04:52:32.129Z",
+                "endsAt": "2026-09-11T04:54:32.129Z",
+                "status": "PUBLISHED"
+              },
+              "student": {
+                "id": "7cdc4680-2051-434b-a235-2c5692849461",
+                "name": "学生甲",
+                "guardianPhone": "13602590998"
+              },
+              "teacher": {
+                "id": "ae2d657e-110b-4a89-bf50-3927c3599ec0",
+                "name": "周老师"
+              }
+            }
+          ],
+          "page": 1,
+          "pageSize": 20,
+          "total": 1
+        }
+      },
+      "requestId": "req-2t",
+      "durationMs": 11
+    },
+    {
+      "name": "缺席策略扣一且预占归零",
+      "method": "GET",
+      "path": "/admin/student-entitlements/05cd9414-4813-42e4-9402-796e465fd07d",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "response": {
+        "data": {
+          "id": "05cd9414-4813-42e4-9402-796e465fd07d",
+          "purchaseId": "eb9261fc-4ad6-4a06-a252-509c5b8c167d",
+          "packageId": "32951eac-d5fd-41f6-a2bc-e8ceecd77e18",
+          "courseId": "981f45ce-42c0-4f17-aadc-0ccb60a136d2",
+          "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+          "totalCredits": 2,
+          "remainingCredits": 1,
+          "reservedCredits": 0,
+          "version": 2,
+          "validFrom": "2026-09-10T00:00:00.000Z",
+          "validUntil": "2027-09-10T00:00:00.000Z",
+          "status": "ACTIVE",
+          "createdAt": "2026-09-10T04:56:32.129Z",
+          "updatedAt": "2026-09-11T04:56:40.730Z",
+          "studentName": "学生甲",
+          "packageName": "画画缺席验证课包",
+          "courseName": "画画"
+        }
+      },
+      "requestId": "req-2u",
+      "durationMs": 10
+    },
+    {
+      "name": "自动缺席生成唯一CONSUME流水",
+      "method": "GET",
+      "path": "/admin/student-entitlements/05cd9414-4813-42e4-9402-796e465fd07d/ledger",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "response": {
+        "data": {
+          "items": [
+            {
+              "id": "72fc9ce6-c098-43a3-9896-e3aa0b0a9dde",
+              "entitlementId": "05cd9414-4813-42e4-9402-796e465fd07d",
+              "purchaseId": null,
+              "reservationId": "43b6ad7a-444e-41b4-a35d-8437ca0c3163",
+              "bookingId": "0d711552-32d9-466a-b4c2-0a1205335743",
+              "idempotencyKey": "booking:0d711552-32d9-466a-b4c2-0a1205335743:consume:1789102592346",
+              "type": "CONSUME",
+              "creditDelta": -1,
+              "balanceAfter": 1,
+              "reservedCreditDelta": -1,
+              "reservedBalanceAfter": 0,
+              "reversalOfId": null,
+              "actorId": "reservation-worker",
+              "note": "课次结束未签到自动结算",
+              "occurredAt": "2026-09-11T04:56:40.730Z",
+              "createdAt": "2026-09-11T04:56:40.730Z"
+            },
+            {
+              "id": "c18aa70b-9658-4146-92e6-a83c2da2ad80",
+              "entitlementId": "05cd9414-4813-42e4-9402-796e465fd07d",
+              "purchaseId": null,
+              "reservationId": "43b6ad7a-444e-41b4-a35d-8437ca0c3163",
+              "bookingId": "0d711552-32d9-466a-b4c2-0a1205335743",
+              "idempotencyKey": "booking:0d711552-32d9-466a-b4c2-0a1205335743:reserve",
+              "type": "RESERVE",
+              "creditDelta": 0,
+              "balanceAfter": 2,
+              "reservedCreditDelta": 1,
+              "reservedBalanceAfter": 1,
+              "reversalOfId": null,
+              "actorId": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+              "note": null,
+              "occurredAt": "2026-09-11T04:56:32.346Z",
+              "createdAt": "2026-09-11T04:56:32.346Z"
+            },
+            {
+              "id": "11b0e003-0a85-40a4-982d-5c23f2487653",
+              "entitlementId": "05cd9414-4813-42e4-9402-796e465fd07d",
+              "purchaseId": "eb9261fc-4ad6-4a06-a252-509c5b8c167d",
+              "reservationId": null,
+              "bookingId": null,
+              "idempotencyKey": "purchase:absent-worker-1789102590998-poff",
+              "type": "PURCHASE",
+              "creditDelta": 2,
+              "balanceAfter": 2,
+              "reservedCreditDelta": 0,
+              "reservedBalanceAfter": 0,
+              "reversalOfId": null,
+              "actorId": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+              "note": null,
+              "occurredAt": "2026-09-10T04:56:32.129Z",
+              "createdAt": "2026-09-10T04:56:32.129Z"
+            }
+          ],
+          "page": 1,
+          "pageSize": 20,
+          "total": 3
+        }
+      },
+      "requestId": "req-2v",
+      "durationMs": 13
+    },
+    {
+      "name": "自动缺席reservation核销持久化",
+      "passed": true,
+      "evidence": {
+        "reservationStatus": "CONSUMED",
+        "consumeCount": 1,
+        "consumeDelta": -1
+      }
+    },
+    {
+      "name": "重复worker周期后预约仍为ABSENT",
+      "method": "GET",
+      "path": "/admin/bookings?sessionId=cd39484b-f39a-48c7-9257-436d90f2b350",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "response": {
+        "data": {
+          "items": [
+            {
+              "id": "0d711552-32d9-466a-b4c2-0a1205335743",
+              "sessionId": "cd39484b-f39a-48c7-9257-436d90f2b350",
+              "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+              "entitlementId": "05cd9414-4813-42e4-9402-796e465fd07d",
+              "status": "ABSENT",
+              "createdAt": "2026-09-11T04:56:32.346Z",
+              "session": {
+                "id": "cd39484b-f39a-48c7-9257-436d90f2b350",
+                "courseId": "981f45ce-42c0-4f17-aadc-0ccb60a136d2",
+                "courseName": "画画",
+                "startsAt": "2026-09-11T04:52:32.129Z",
+                "endsAt": "2026-09-11T04:54:32.129Z",
+                "status": "PUBLISHED"
+              },
+              "student": {
+                "id": "7cdc4680-2051-434b-a235-2c5692849461",
+                "name": "学生甲",
+                "guardianPhone": "13602590998"
+              },
+              "teacher": {
+                "id": "ae2d657e-110b-4a89-bf50-3927c3599ec0",
+                "name": "周老师"
+              }
+            }
+          ],
+          "page": 1,
+          "pageSize": 20,
+          "total": 1
+        }
+      },
+      "requestId": "req-2w",
+      "durationMs": 22
+    },
+    {
+      "name": "重复worker周期不重复扣权益",
+      "method": "GET",
+      "path": "/admin/student-entitlements/05cd9414-4813-42e4-9402-796e465fd07d",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "response": {
+        "data": {
+          "id": "05cd9414-4813-42e4-9402-796e465fd07d",
+          "purchaseId": "eb9261fc-4ad6-4a06-a252-509c5b8c167d",
+          "packageId": "32951eac-d5fd-41f6-a2bc-e8ceecd77e18",
+          "courseId": "981f45ce-42c0-4f17-aadc-0ccb60a136d2",
+          "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+          "totalCredits": 2,
+          "remainingCredits": 1,
+          "reservedCredits": 0,
+          "version": 2,
+          "validFrom": "2026-09-10T00:00:00.000Z",
+          "validUntil": "2027-09-10T00:00:00.000Z",
+          "status": "ACTIVE",
+          "createdAt": "2026-09-10T04:56:32.129Z",
+          "updatedAt": "2026-09-11T04:56:40.730Z",
+          "studentName": "学生甲",
+          "packageName": "画画缺席验证课包",
+          "courseName": "画画"
+        }
+      },
+      "requestId": "req-2x",
+      "durationMs": 9
+    },
+    {
+      "name": "重复worker周期数据库扣减幂等",
+      "passed": true,
+      "evidence": {
+        "reservationStatus": "CONSUMED",
+        "consumeCount": 1,
+        "consumeDelta": -1
+      }
+    },
+    {
+      "name": "创建停课课次",
+      "method": "POST",
+      "path": "/sessions",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+        "courseName": "民族舞",
+        "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+        "campusName": "中央校区",
+        "classroomId": "f645739e-8cc1-4667-b992-bbf99150723b",
+        "classroomName": "舞蹈教室",
+        "teacherId": "2b0dd9a2-60a6-4172-acbc-f5b221294f28",
+        "teacherName": "王老师",
+        "startsAt": "2026-10-22T02:00:00.000Z",
+        "endsAt": "2026-10-22T03:30:00.000Z",
+        "capacity": 3,
+        "status": "PUBLISHED",
+        "bookingOpensAt": "2026-09-01T00:00:00.000Z",
+        "bookingClosesAt": "2026-10-20T01:00:00.000Z",
+        "cancelDeadlineAt": "2026-10-19T02:00:00.000Z"
+      },
+      "response": {
+        "data": {
+          "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+          "courseName": "民族舞",
+          "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+          "campusName": "中央校区",
+          "teacherId": "2b0dd9a2-60a6-4172-acbc-f5b221294f28",
+          "teacherName": "王老师",
+          "startsAt": "2026-10-22T02:00:00.000Z",
+          "endsAt": "2026-10-22T03:30:00.000Z",
+          "capacity": 3,
+          "classroomId": "f645739e-8cc1-4667-b992-bbf99150723b",
+          "classroomName": "舞蹈教室",
+          "status": "PUBLISHED",
+          "bookingOpensAt": "2026-09-01T00:00:00.000Z",
+          "bookingClosesAt": "2026-10-20T01:00:00.000Z",
+          "cancelDeadlineAt": "2026-10-19T02:00:00.000Z",
+          "id": "a6910dbc-cd29-472f-b497-dce261fd81ef",
+          "seriesId": null,
+          "occurrenceIndex": null
+        }
+      },
+      "requestId": "req-2y",
+      "durationMs": 12
+    },
+    {
+      "name": "停课前预约",
+      "method": "POST",
+      "path": "/admin/bookings",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "sessionId": "a6910dbc-cd29-472f-b497-dce261fd81ef",
+        "studentId": "7cdc4680-2051-434b-a235-2c5692849461"
+      },
+      "response": {
+        "data": {
+          "booking": {
+            "id": "34585800-84f5-46f9-8ed1-ea01bed4925b",
+            "sessionId": "a6910dbc-cd29-472f-b497-dce261fd81ef",
+            "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+            "entitlementId": "9b7748e2-9b81-4999-a366-9ce799d17368",
+            "status": "CONFIRMED",
+            "createdAt": "2026-09-11T04:56:52.748Z"
+          },
+          "alreadyBooked": false
+        }
+      },
+      "requestId": "req-2z",
+      "durationMs": 32
+    },
+    {
+      "name": "停课",
+      "method": "POST",
+      "path": "/sessions/a6910dbc-cd29-472f-b497-dce261fd81ef/cancel",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "request": {
+        "reason": "教师请假",
+        "scope": "THIS"
+      },
+      "response": {
+        "data": {
+          "id": "a6910dbc-cd29-472f-b497-dce261fd81ef",
+          "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+          "courseName": "民族舞",
+          "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+          "campusName": "中央校区",
+          "classroomId": "f645739e-8cc1-4667-b992-bbf99150723b",
+          "classroomName": "舞蹈教室",
+          "teacherId": "2b0dd9a2-60a6-4172-acbc-f5b221294f28",
+          "teacherName": "王老师",
+          "startsAt": "2026-10-22T02:00:00.000Z",
+          "endsAt": "2026-10-22T03:30:00.000Z",
+          "capacity": 3,
+          "status": "CANCELLED",
+          "bookingOpensAt": "2026-09-01T00:00:00.000Z",
+          "bookingClosesAt": "2026-10-20T01:00:00.000Z",
+          "cancelDeadlineAt": "2026-10-19T02:00:00.000Z",
+          "seriesId": null,
+          "occurrenceIndex": null
+        }
+      },
+      "requestId": "req-30",
+      "durationMs": 21
+    },
+    {
+      "name": "停课联动预约状态",
+      "method": "GET",
+      "path": "/admin/bookings?sessionId=a6910dbc-cd29-472f-b497-dce261fd81ef",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "response": {
+        "data": {
+          "items": [
+            {
+              "id": "34585800-84f5-46f9-8ed1-ea01bed4925b",
+              "sessionId": "a6910dbc-cd29-472f-b497-dce261fd81ef",
+              "studentId": "7cdc4680-2051-434b-a235-2c5692849461",
+              "entitlementId": "9b7748e2-9b81-4999-a366-9ce799d17368",
+              "status": "COURSE_CANCELLED",
+              "createdAt": "2026-09-11T04:56:52.748Z",
+              "session": {
+                "id": "a6910dbc-cd29-472f-b497-dce261fd81ef",
+                "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+                "courseName": "民族舞",
+                "startsAt": "2026-10-22T02:00:00.000Z",
+                "endsAt": "2026-10-22T03:30:00.000Z",
+                "status": "CANCELLED"
+              },
+              "student": {
+                "id": "7cdc4680-2051-434b-a235-2c5692849461",
+                "name": "学生甲",
+                "guardianPhone": "13602590998"
+              },
+              "teacher": {
+                "id": "2b0dd9a2-60a6-4172-acbc-f5b221294f28",
+                "name": "王老师"
+              }
+            }
+          ],
+          "page": 1,
+          "pageSize": 20,
+          "total": 1
+        }
+      },
+      "requestId": "req-31",
+      "durationMs": 7
+    },
+    {
+      "name": "系列排课预检",
+      "method": "POST",
+      "path": "/session-series/preflight",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "request": {
+        "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+        "courseName": "民族舞",
+        "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+        "campusName": "中央校区",
+        "classroomId": "f645739e-8cc1-4667-b992-bbf99150723b",
+        "classroomName": "舞蹈教室",
+        "teacherId": "2b0dd9a2-60a6-4172-acbc-f5b221294f28",
+        "teacherName": "王老师",
+        "startsAt": "2026-11-03T02:00:00.000Z",
+        "endsAt": "2026-11-03T03:30:00.000Z",
+        "capacity": 6,
+        "status": "PUBLISHED",
+        "recurrence": "WEEKLY",
+        "intervalWeeks": 1,
+        "repeatCount": 3
+      },
+      "response": {
+        "data": {
+          "series": null,
+          "sessions": [],
+          "successDates": [
+            "2026-11-03",
+            "2026-11-10",
+            "2026-11-17"
+          ],
+          "conflicts": []
+        }
+      },
+      "requestId": "req-32",
+      "durationMs": 28
+    },
+    {
+      "name": "创建系列排课",
+      "method": "POST",
+      "path": "/session-series",
+      "expectedStatus": [
+        201
+      ],
+      "actualStatus": 201,
+      "passed": true,
+      "request": {
+        "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+        "courseName": "民族舞",
+        "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+        "campusName": "中央校区",
+        "classroomId": "f645739e-8cc1-4667-b992-bbf99150723b",
+        "classroomName": "舞蹈教室",
+        "teacherId": "2b0dd9a2-60a6-4172-acbc-f5b221294f28",
+        "teacherName": "王老师",
+        "startsAt": "2026-11-03T02:00:00.000Z",
+        "endsAt": "2026-11-03T03:30:00.000Z",
+        "capacity": 6,
+        "status": "PUBLISHED",
+        "recurrence": "WEEKLY",
+        "intervalWeeks": 1,
+        "repeatCount": 3
+      },
+      "response": {
+        "data": {
+          "series": {
+            "id": "c440be6b-1f34-474c-8982-f65ee6b47710",
+            "recurrence": "WEEKLY",
+            "intervalWeeks": 1,
+            "requestedCount": 3,
+            "createdBy": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+            "createdAt": "2026-09-11T04:56:52.839Z"
+          },
+          "sessions": [
+            {
+              "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+              "courseName": "民族舞",
+              "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+              "campusName": "中央校区",
+              "classroomId": "f645739e-8cc1-4667-b992-bbf99150723b",
+              "classroomName": "舞蹈教室",
+              "teacherId": "2b0dd9a2-60a6-4172-acbc-f5b221294f28",
+              "teacherName": "王老师",
+              "startsAt": "2026-11-03T02:00:00.000Z",
+              "endsAt": "2026-11-03T03:30:00.000Z",
+              "capacity": 6,
+              "status": "PUBLISHED",
+              "occurrenceIndex": 0,
+              "seriesId": "c440be6b-1f34-474c-8982-f65ee6b47710",
+              "id": "6b3842d6-57d6-433c-a87e-3d8e0627961b",
+              "bookingOpensAt": "2026-10-27T02:00:00.000Z",
+              "bookingClosesAt": "2026-11-03T00:00:00.000Z",
+              "cancelDeadlineAt": "2026-11-02T22:00:00.000Z"
+            },
+            {
+              "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+              "courseName": "民族舞",
+              "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+              "campusName": "中央校区",
+              "classroomId": "f645739e-8cc1-4667-b992-bbf99150723b",
+              "classroomName": "舞蹈教室",
+              "teacherId": "2b0dd9a2-60a6-4172-acbc-f5b221294f28",
+              "teacherName": "王老师",
+              "startsAt": "2026-11-10T02:00:00.000Z",
+              "endsAt": "2026-11-10T03:30:00.000Z",
+              "capacity": 6,
+              "status": "PUBLISHED",
+              "occurrenceIndex": 1,
+              "seriesId": "c440be6b-1f34-474c-8982-f65ee6b47710",
+              "id": "3a438c8e-9d27-4953-adb0-7d1ec2b09987",
+              "bookingOpensAt": "2026-11-03T02:00:00.000Z",
+              "bookingClosesAt": "2026-11-10T00:00:00.000Z",
+              "cancelDeadlineAt": "2026-11-09T22:00:00.000Z"
+            },
+            {
+              "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+              "courseName": "民族舞",
+              "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+              "campusName": "中央校区",
+              "classroomId": "f645739e-8cc1-4667-b992-bbf99150723b",
+              "classroomName": "舞蹈教室",
+              "teacherId": "2b0dd9a2-60a6-4172-acbc-f5b221294f28",
+              "teacherName": "王老师",
+              "startsAt": "2026-11-17T02:00:00.000Z",
+              "endsAt": "2026-11-17T03:30:00.000Z",
+              "capacity": 6,
+              "status": "PUBLISHED",
+              "occurrenceIndex": 2,
+              "seriesId": "c440be6b-1f34-474c-8982-f65ee6b47710",
+              "id": "ca616504-2eec-4c62-9a23-d8047499662e",
+              "bookingOpensAt": "2026-11-10T02:00:00.000Z",
+              "bookingClosesAt": "2026-11-17T00:00:00.000Z",
+              "cancelDeadlineAt": "2026-11-16T22:00:00.000Z"
+            }
+          ],
+          "successDates": [
+            "2026-11-03",
+            "2026-11-10",
+            "2026-11-17"
+          ],
+          "conflicts": []
+        }
+      },
+      "requestId": "req-33",
+      "durationMs": 31
+    },
+    {
+      "name": "系列调课本次及以后",
+      "method": "PATCH",
+      "path": "/sessions/3a438c8e-9d27-4953-adb0-7d1ec2b09987/reschedule",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "request": {
+        "startsAt": "2026-11-11T04:00:00.000Z",
+        "endsAt": "2026-11-11T05:30:00.000Z",
+        "scope": "THIS_AND_FUTURE"
+      },
+      "response": {
+        "data": {
+          "sessions": [
+            {
+              "id": "3a438c8e-9d27-4953-adb0-7d1ec2b09987",
+              "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+              "courseName": "民族舞",
+              "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+              "campusName": "中央校区",
+              "classroomId": "f645739e-8cc1-4667-b992-bbf99150723b",
+              "classroomName": "舞蹈教室",
+              "teacherId": "2b0dd9a2-60a6-4172-acbc-f5b221294f28",
+              "teacherName": "王老师",
+              "startsAt": "2026-11-11T04:00:00.000Z",
+              "endsAt": "2026-11-11T05:30:00.000Z",
+              "capacity": 6,
+              "status": "PUBLISHED",
+              "bookingOpensAt": "2026-11-04T04:00:00.000Z",
+              "bookingClosesAt": "2026-11-11T02:00:00.000Z",
+              "cancelDeadlineAt": "2026-11-11T00:00:00.000Z",
+              "seriesId": "c440be6b-1f34-474c-8982-f65ee6b47710",
+              "occurrenceIndex": 1
+            },
+            {
+              "id": "ca616504-2eec-4c62-9a23-d8047499662e",
+              "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+              "courseName": "民族舞",
+              "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+              "campusName": "中央校区",
+              "classroomId": "f645739e-8cc1-4667-b992-bbf99150723b",
+              "classroomName": "舞蹈教室",
+              "teacherId": "2b0dd9a2-60a6-4172-acbc-f5b221294f28",
+              "teacherName": "王老师",
+              "startsAt": "2026-11-18T04:00:00.000Z",
+              "endsAt": "2026-11-18T05:30:00.000Z",
+              "capacity": 6,
+              "status": "PUBLISHED",
+              "bookingOpensAt": "2026-11-11T04:00:00.000Z",
+              "bookingClosesAt": "2026-11-18T02:00:00.000Z",
+              "cancelDeadlineAt": "2026-11-18T00:00:00.000Z",
+              "seriesId": "c440be6b-1f34-474c-8982-f65ee6b47710",
+              "occurrenceIndex": 2
+            }
+          ]
+        }
+      },
+      "requestId": "req-34",
+      "durationMs": 19
+    },
+    {
+      "name": "系列停课本次及以后",
+      "method": "POST",
+      "path": "/sessions/3a438c8e-9d27-4953-adb0-7d1ec2b09987/cancel",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "request": {
+        "reason": "系列后续停课",
+        "scope": "THIS_AND_FUTURE"
+      },
+      "response": {
+        "data": {
+          "sessions": [
+            {
+              "id": "3a438c8e-9d27-4953-adb0-7d1ec2b09987",
+              "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+              "courseName": "民族舞",
+              "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+              "campusName": "中央校区",
+              "classroomId": "f645739e-8cc1-4667-b992-bbf99150723b",
+              "classroomName": "舞蹈教室",
+              "teacherId": "2b0dd9a2-60a6-4172-acbc-f5b221294f28",
+              "teacherName": "王老师",
+              "startsAt": "2026-11-11T04:00:00.000Z",
+              "endsAt": "2026-11-11T05:30:00.000Z",
+              "capacity": 6,
+              "status": "CANCELLED",
+              "bookingOpensAt": "2026-11-04T04:00:00.000Z",
+              "bookingClosesAt": "2026-11-11T02:00:00.000Z",
+              "cancelDeadlineAt": "2026-11-11T00:00:00.000Z",
+              "seriesId": "c440be6b-1f34-474c-8982-f65ee6b47710",
+              "occurrenceIndex": 1
+            },
+            {
+              "id": "ca616504-2eec-4c62-9a23-d8047499662e",
+              "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+              "courseName": "民族舞",
+              "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+              "campusName": "中央校区",
+              "classroomId": "f645739e-8cc1-4667-b992-bbf99150723b",
+              "classroomName": "舞蹈教室",
+              "teacherId": "2b0dd9a2-60a6-4172-acbc-f5b221294f28",
+              "teacherName": "王老师",
+              "startsAt": "2026-11-18T04:00:00.000Z",
+              "endsAt": "2026-11-18T05:30:00.000Z",
+              "capacity": 6,
+              "status": "CANCELLED",
+              "bookingOpensAt": "2026-11-11T04:00:00.000Z",
+              "bookingClosesAt": "2026-11-18T02:00:00.000Z",
+              "cancelDeadlineAt": "2026-11-18T00:00:00.000Z",
+              "seriesId": "c440be6b-1f34-474c-8982-f65ee6b47710",
+              "occurrenceIndex": 2
+            }
+          ]
+        }
+      },
+      "requestId": "req-35",
+      "durationMs": 21
+    },
+    {
+      "name": "签到后权益扣减",
+      "method": "GET",
+      "path": "/admin/student-entitlements/f489fd4f-da42-4ba6-b974-7d101f5653b7",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "response": {
+        "data": {
+          "id": "f489fd4f-da42-4ba6-b974-7d101f5653b7",
+          "purchaseId": "b0c20479-4438-44c4-93ed-f7afd985981a",
+          "packageId": "7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+          "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+          "studentId": "96c7025b-5c07-44e2-8ff5-dac3a046a57a",
+          "totalCredits": 10,
+          "remainingCredits": 9,
+          "reservedCredits": 0,
+          "version": 2,
+          "validFrom": "2026-09-11T00:00:00.000Z",
+          "validUntil": "2027-09-11T00:00:00.000Z",
+          "status": "ACTIVE",
+          "createdAt": "2026-09-11T04:56:31.787Z",
+          "updatedAt": "2026-09-11T04:56:32.035Z",
+          "studentName": "学生乙",
+          "packageName": "民族舞10次课",
+          "courseName": "民族舞"
+        }
+      },
+      "requestId": "req-36",
+      "durationMs": 4
+    },
+    {
+      "name": "预约签到流水",
+      "method": "GET",
+      "path": "/admin/student-entitlements/f489fd4f-da42-4ba6-b974-7d101f5653b7/ledger",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "response": {
+        "data": {
+          "items": [
+            {
+              "id": "18b942d0-62f3-4bac-b4f9-d97942bdf7fa",
+              "entitlementId": "f489fd4f-da42-4ba6-b974-7d101f5653b7",
+              "purchaseId": null,
+              "reservationId": "f148e90e-8519-4c40-85c4-1d05780ac1fa",
+              "bookingId": "cf3573d5-9f07-4333-b9a8-d07a1a31fb90",
+              "idempotencyKey": "booking:cf3573d5-9f07-4333-b9a8-d07a1a31fb90:consume:1789102591990",
+              "type": "CONSUME",
+              "creditDelta": -1,
+              "balanceAfter": 9,
+              "reservedCreditDelta": -1,
+              "reservedBalanceAfter": 0,
+              "reversalOfId": null,
+              "actorId": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+              "note": "签到：ATTENDED",
+              "occurredAt": "2026-09-11T04:56:32.035Z",
+              "createdAt": "2026-09-11T04:56:32.035Z"
+            },
+            {
+              "id": "224d1379-4335-41ef-8acf-df5305cb376d",
+              "entitlementId": "f489fd4f-da42-4ba6-b974-7d101f5653b7",
+              "purchaseId": null,
+              "reservationId": "f148e90e-8519-4c40-85c4-1d05780ac1fa",
+              "bookingId": "cf3573d5-9f07-4333-b9a8-d07a1a31fb90",
+              "idempotencyKey": "booking:cf3573d5-9f07-4333-b9a8-d07a1a31fb90:reserve",
+              "type": "RESERVE",
+              "creditDelta": 0,
+              "balanceAfter": 10,
+              "reservedCreditDelta": 1,
+              "reservedBalanceAfter": 1,
+              "reversalOfId": null,
+              "actorId": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+              "note": null,
+              "occurredAt": "2026-09-11T04:56:31.990Z",
+              "createdAt": "2026-09-11T04:56:31.990Z"
+            },
+            {
+              "id": "116e4f0e-a5fa-4132-8470-619370e6fb9c",
+              "entitlementId": "f489fd4f-da42-4ba6-b974-7d101f5653b7",
+              "purchaseId": "b0c20479-4438-44c4-93ed-f7afd985981a",
+              "reservationId": null,
+              "bookingId": null,
+              "idempotencyKey": "purchase:buy2-1789102590998-poff",
+              "type": "PURCHASE",
+              "creditDelta": 10,
+              "balanceAfter": 10,
+              "reservedCreditDelta": 0,
+              "reservedBalanceAfter": 0,
+              "reversalOfId": null,
+              "actorId": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+              "note": null,
+              "occurredAt": "2026-09-11T04:56:31.787Z",
+              "createdAt": "2026-09-11T04:56:31.787Z"
+            }
+          ],
+          "page": 1,
+          "pageSize": 20,
+          "total": 3
+        }
+      },
+      "requestId": "req-37",
+      "durationMs": 7
+    },
+    {
+      "name": "取消释放流水",
+      "method": "GET",
+      "path": "/admin/student-entitlements/9b7748e2-9b81-4999-a366-9ce799d17368/ledger",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "response": {
+        "data": {
+          "items": [
+            {
+              "id": "827920ad-bb89-40ed-9e58-3649e58cb935",
+              "entitlementId": "9b7748e2-9b81-4999-a366-9ce799d17368",
+              "purchaseId": null,
+              "reservationId": "b08725b7-b259-4098-8eb5-00b4e7c4a0ce",
+              "bookingId": "34585800-84f5-46f9-8ed1-ea01bed4925b",
+              "idempotencyKey": "booking:34585800-84f5-46f9-8ed1-ea01bed4925b:release:1789102612748",
+              "type": "RELEASE",
+              "creditDelta": 0,
+              "balanceAfter": 10,
+              "reservedCreditDelta": -1,
+              "reservedBalanceAfter": 0,
+              "reversalOfId": null,
+              "actorId": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+              "note": "课次取消",
+              "occurredAt": "2026-09-11T04:56:52.781Z",
+              "createdAt": "2026-09-11T04:56:52.781Z"
+            },
+            {
+              "id": "8d45d712-0002-4ca6-9500-4ee21ce983d4",
+              "entitlementId": "9b7748e2-9b81-4999-a366-9ce799d17368",
+              "purchaseId": null,
+              "reservationId": "b08725b7-b259-4098-8eb5-00b4e7c4a0ce",
+              "bookingId": "34585800-84f5-46f9-8ed1-ea01bed4925b",
+              "idempotencyKey": "booking:34585800-84f5-46f9-8ed1-ea01bed4925b:reserve",
+              "type": "RESERVE",
+              "creditDelta": 0,
+              "balanceAfter": 10,
+              "reservedCreditDelta": 1,
+              "reservedBalanceAfter": 1,
+              "reversalOfId": null,
+              "actorId": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+              "note": null,
+              "occurredAt": "2026-09-11T04:56:52.748Z",
+              "createdAt": "2026-09-11T04:56:52.748Z"
+            },
+            {
+              "id": "6c490231-0960-4d64-b499-27a4981b5ca7",
+              "entitlementId": "9b7748e2-9b81-4999-a366-9ce799d17368",
+              "purchaseId": null,
+              "reservationId": "a54dca2d-a168-47df-b085-44611561b02b",
+              "bookingId": "ad063b68-d9ec-4ac5-9e24-7c0520cd230c",
+              "idempotencyKey": "booking:ad063b68-d9ec-4ac5-9e24-7c0520cd230c:release:1789102591912",
+              "type": "RELEASE",
+              "creditDelta": 0,
+              "balanceAfter": 10,
+              "reservedCreditDelta": -1,
+              "reservedBalanceAfter": 0,
+              "reversalOfId": null,
+              "actorId": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+              "note": "管理员提前取消：家长来电",
+              "occurredAt": "2026-09-11T04:56:31.971Z",
+              "createdAt": "2026-09-11T04:56:31.971Z"
+            },
+            {
+              "id": "4151678c-e502-46e2-8e8f-4d7ee5de274b",
+              "entitlementId": "9b7748e2-9b81-4999-a366-9ce799d17368",
+              "purchaseId": null,
+              "reservationId": "a54dca2d-a168-47df-b085-44611561b02b",
+              "bookingId": "ad063b68-d9ec-4ac5-9e24-7c0520cd230c",
+              "idempotencyKey": "booking:ad063b68-d9ec-4ac5-9e24-7c0520cd230c:reserve",
+              "type": "RESERVE",
+              "creditDelta": 0,
+              "balanceAfter": 10,
+              "reservedCreditDelta": 1,
+              "reservedBalanceAfter": 1,
+              "reversalOfId": null,
+              "actorId": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+              "note": null,
+              "occurredAt": "2026-09-11T04:56:31.912Z",
+              "createdAt": "2026-09-11T04:56:31.912Z"
+            },
+            {
+              "id": "28e67538-a7a2-4461-b1c9-f0210d42457f",
+              "entitlementId": "9b7748e2-9b81-4999-a366-9ce799d17368",
+              "purchaseId": "505b2fd2-e7c8-4b89-85db-1e472d50d4d3",
+              "reservationId": null,
+              "bookingId": null,
+              "idempotencyKey": "purchase:buy1-1789102590998-poff",
+              "type": "PURCHASE",
+              "creditDelta": 10,
+              "balanceAfter": 10,
+              "reservedCreditDelta": 0,
+              "reservedBalanceAfter": 0,
+              "reversalOfId": null,
+              "actorId": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+              "note": "线下收款",
+              "occurredAt": "2026-09-11T04:56:31.739Z",
+              "createdAt": "2026-09-11T04:56:31.739Z"
+            }
+          ],
+          "page": 1,
+          "pageSize": 20,
+          "total": 5
+        }
+      },
+      "requestId": "req-38",
+      "durationMs": 7
+    },
+    {
+      "name": "租户B列表隔离",
+      "method": "GET",
+      "path": "/admin/course-packages",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "response": {
+        "data": {
+          "items": [],
+          "page": 1,
+          "pageSize": 20,
+          "total": 0
+        }
+      },
+      "requestId": "req-39",
+      "durationMs": 4
+    },
+    {
+      "name": "租户B权益详情隔离",
+      "method": "GET",
+      "path": "/admin/student-entitlements/9b7748e2-9b81-4999-a366-9ce799d17368",
+      "expectedStatus": [
+        404
+      ],
+      "actualStatus": 404,
+      "expectedErrorCode": "ENTITLEMENT_NOT_FOUND",
+      "actualErrorCode": "ENTITLEMENT_NOT_FOUND",
+      "passed": true,
+      "response": {
+        "error": {
+          "code": "ENTITLEMENT_NOT_FOUND",
+          "message": "学生权益不存在"
+        },
+        "requestId": "req-3a"
+      },
+      "requestId": "req-3a",
+      "durationMs": 7
+    },
+    {
+      "name": "租户B流水隔离",
+      "method": "GET",
+      "path": "/admin/student-entitlements/9b7748e2-9b81-4999-a366-9ce799d17368/ledger",
+      "expectedStatus": [
+        404
+      ],
+      "actualStatus": 404,
+      "expectedErrorCode": "ENTITLEMENT_NOT_FOUND",
+      "actualErrorCode": "ENTITLEMENT_NOT_FOUND",
+      "passed": true,
+      "response": {
+        "error": {
+          "code": "ENTITLEMENT_NOT_FOUND",
+          "message": "学生权益不存在"
+        },
+        "requestId": "req-3b"
+      },
+      "requestId": "req-3b",
+      "durationMs": 6
+    },
+    {
+      "name": "未认证访问拒绝",
+      "method": "GET",
+      "path": "/admin/course-packages",
+      "expectedStatus": [
+        401
+      ],
+      "actualStatus": 401,
+      "expectedErrorCode": "AUTH_REQUIRED",
+      "actualErrorCode": "AUTH_REQUIRED",
+      "passed": true,
+      "response": {
+        "error": {
+          "code": "AUTH_REQUIRED",
+          "message": "请先登录"
+        },
+        "requestId": "req-3c"
+      },
+      "requestId": "req-3c",
+      "durationMs": 2
+    },
+    {
+      "name": "真实PostgreSQL持久化核验",
+      "passed": true,
+      "evidence": {
+        "server_version": "16.15",
+        "database": "kebao_e2e",
+        "organization": {
+          "id": "c101d97e-d961-410f-96fc-5f25613d39ac",
+          "code": "BD",
+          "name": "BD",
+          "isActive": true
+        },
+        "counts": {
+          "campuses": 1,
+          "classrooms": 1,
+          "courses": 4,
+          "users": 5,
+          "students": 2,
+          "sessions": 9,
+          "bookings": 6,
+          "packages": 4,
+          "purchases": 6,
+          "entitlements": 6,
+          "ledgers": 18
+        }
+      }
+    },
+    {
+      "name": "平台恢复前登录",
+      "method": "POST",
+      "path": "/platform/auth/login",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "request": {
+        "username": "superadmin",
+        "password": "[REDACTED]"
+      },
+      "response": {
+        "data": {
+          "accessToken": "[REDACTED]",
+          "refreshToken": "[REDACTED]",
+          "accessTokenExpiresIn": "[REDACTED]",
+          "account": {
+            "id": "cmtwhh5z20000k6j5q03jqzkg",
+            "username": "superadmin",
+            "name": "超级管理员",
+            "isActive": true,
+            "mustChangePassword": "[REDACTED]"
+          }
+        }
+      },
+      "requestId": "req-3d",
+      "durationMs": 42
+    },
+    {
+      "name": "恢复平台原密码",
+      "method": "POST",
+      "path": "/platform/auth/change-password",
+      "expectedStatus": [
+        204
+      ],
+      "actualStatus": 204,
+      "passed": true,
+      "request": {
+        "currentPassword": "[REDACTED]",
+        "newPassword": "[REDACTED]"
+      },
+      "response": null,
+      "requestId": "req-3e",
+      "durationMs": 84
+    },
+    {
+      "name": "验证平台原密码已恢复",
+      "method": "POST",
+      "path": "/platform/auth/login",
+      "expectedStatus": [
+        200
+      ],
+      "actualStatus": 200,
+      "passed": true,
+      "request": {
+        "username": "superadmin",
+        "password": "[REDACTED]"
+      },
+      "response": {
+        "data": {
+          "accessToken": "[REDACTED]",
+          "refreshToken": "[REDACTED]",
+          "accessTokenExpiresIn": "[REDACTED]",
+          "account": {
+            "id": "cmtwhh5z20000k6j5q03jqzkg",
+            "username": "superadmin",
+            "name": "超级管理员",
+            "isActive": true,
+            "mustChangePassword": "[REDACTED]"
+          }
+        }
+      },
+      "requestId": "req-3f",
+      "durationMs": 28
+    }
+  ],
+  "entities": {
+    "tenants": {
+      "a": {
+        "organization": {
+          "id": "c101d97e-d961-410f-96fc-5f25613d39ac",
+          "code": "BD",
+          "name": "BD",
+          "isActive": true,
+          "deletedAt": null,
+          "createdAt": "2026-09-11T04:56:31.209Z",
+          "updatedAt": "2026-09-11T04:56:31.209Z"
+        },
+        "admin": {
+          "id": "e2f42212-c9fa-4ffd-a3cd-1530199cb87f",
+          "organizationId": "c101d97e-d961-410f-96fc-5f25613d39ac",
+          "name": "主机构管理员",
+          "phone": "13902590998",
+          "email": null,
+          "isActive": true,
+          "mustChangePassword": "[REDACTED]",
+          "lastLoginAt": null,
+          "createdAt": "2026-09-11T04:56:31.246Z",
+          "updatedAt": "2026-09-11T04:56:31.246Z",
+          "temporaryPassword": "[REDACTED]"
+        }
+      },
+      "b": {
+        "organization": {
+          "id": "75a6d9fa-577b-4eda-81d0-bfe86754f1b3",
+          "code": "ISO02590998",
+          "name": "隔离机构-1789102590998-poff",
+          "isActive": true,
+          "deletedAt": null,
+          "createdAt": "2026-09-11T04:56:31.406Z",
+          "updatedAt": "2026-09-11T04:56:31.406Z"
+        },
+        "admin": {
+          "id": "bb270eca-817c-44c0-a271-2933172cf4c7",
+          "organizationId": "75a6d9fa-577b-4eda-81d0-bfe86754f1b3",
+          "name": "隔离机构管理员",
+          "phone": "13802590998",
+          "email": null,
+          "isActive": true,
+          "mustChangePassword": "[REDACTED]",
+          "lastLoginAt": null,
+          "createdAt": "2026-09-11T04:56:31.438Z",
+          "updatedAt": "2026-09-11T04:56:31.438Z",
+          "temporaryPassword": "[REDACTED]"
+        }
+      }
+    },
+    "masterData": {
+      "campus": {
+        "id": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+        "organizationId": "c101d97e-d961-410f-96fc-5f25613d39ac",
+        "name": "中央校区",
+        "address": "测试路1号",
+        "phone": null,
+        "timezone": "Asia/Shanghai",
+        "isActive": true,
+        "createdAt": "2026-09-11T04:56:31.610Z",
+        "updatedAt": "2026-09-11T04:56:31.610Z"
+      },
+      "room": {
+        "id": "f645739e-8cc1-4667-b992-bbf99150723b",
+        "organizationId": "c101d97e-d961-410f-96fc-5f25613d39ac",
+        "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+        "name": "舞蹈教室",
+        "code": "A101",
+        "capacity": 2,
+        "isActive": true,
+        "createdAt": "2026-09-11T04:56:31.617Z",
+        "updatedAt": "2026-09-11T04:56:31.617Z",
+        "campus": {
+          "name": "中央校区"
+        },
+        "campusName": "中央校区"
+      },
+      "courses": {
+        "民族舞": {
+          "id": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+          "organizationId": "c101d97e-d961-410f-96fc-5f25613d39ac",
+          "name": "民族舞",
+          "code": "MZW",
+          "durationMinutes": 90,
+          "description": null,
+          "isActive": true,
+          "createdAt": "2026-09-11T04:56:31.628Z",
+          "updatedAt": "2026-09-11T04:56:31.628Z"
+        },
+        "钢琴": {
+          "id": "db770ccc-39f2-44de-99fd-f7c69c23c4f6",
+          "organizationId": "c101d97e-d961-410f-96fc-5f25613d39ac",
+          "name": "钢琴",
+          "code": "GQ",
+          "durationMinutes": 60,
+          "description": null,
+          "isActive": true,
+          "createdAt": "2026-09-11T04:56:31.634Z",
+          "updatedAt": "2026-09-11T04:56:31.634Z"
+        },
+        "书法": {
+          "id": "62211d60-b978-4a60-a79a-818394f497de",
+          "organizationId": "c101d97e-d961-410f-96fc-5f25613d39ac",
+          "name": "书法",
+          "code": "SF",
+          "durationMinutes": 75,
+          "description": null,
+          "isActive": true,
+          "createdAt": "2026-09-11T04:56:31.638Z",
+          "updatedAt": "2026-09-11T04:56:31.638Z"
+        },
+        "画画": {
+          "id": "981f45ce-42c0-4f17-aadc-0ccb60a136d2",
+          "organizationId": "c101d97e-d961-410f-96fc-5f25613d39ac",
+          "name": "画画",
+          "code": "HH",
+          "durationMinutes": 80,
+          "description": null,
+          "isActive": true,
+          "createdAt": "2026-09-11T04:56:31.643Z",
+          "updatedAt": "2026-09-11T04:56:31.643Z"
+        }
+      },
+      "teacher": {
+        "id": "2b0dd9a2-60a6-4172-acbc-f5b221294f28",
+        "name": "王老师",
+        "phone": "13702590998",
+        "email": null,
+        "specialty": "民族舞/钢琴",
+        "remark": null,
+        "isActive": true,
+        "createdAt": "2026-09-11T04:56:31.648Z",
+        "updatedAt": "2026-09-11T04:56:31.648Z"
+      },
+      "teacher2": {
+        "id": "2b3672b2-1364-4ef1-8996-a50023b42415",
+        "name": "赵老师",
+        "phone": "13502590998",
+        "email": null,
+        "specialty": "民族舞",
+        "remark": null,
+        "isActive": true,
+        "createdAt": "2026-09-11T04:56:31.653Z",
+        "updatedAt": "2026-09-11T04:56:31.653Z"
+      },
+      "lifecycleTeacher": {
+        "id": "ae2d657e-110b-4a89-bf50-3927c3599ec0",
+        "name": "周老师",
+        "phone": "13402590998",
+        "email": null,
+        "specialty": "书法/画画",
+        "remark": null,
+        "isActive": true,
+        "createdAt": "2026-09-11T04:56:31.656Z",
+        "updatedAt": "2026-09-11T04:56:31.656Z"
+      },
+      "guardian": {
+        "id": "73a14504-3d34-41c6-8ed2-bb3f61a0bf00",
+        "name": "李家长",
+        "phone": "13602590998",
+        "email": null,
+        "specialty": null,
+        "remark": null,
+        "isActive": true,
+        "createdAt": "2026-09-11T04:56:31.661Z",
+        "updatedAt": "2026-09-11T04:56:31.661Z"
+      },
+      "student1": {
+        "id": "7cdc4680-2051-434b-a235-2c5692849461",
+        "organizationId": "c101d97e-d961-410f-96fc-5f25613d39ac",
+        "name": "学生甲",
+        "phone": null,
+        "gender": "女",
+        "birthDate": "2018-06-01T00:00:00.000Z",
+        "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+        "remark": null,
+        "isActive": true,
+        "createdAt": "2026-09-11T04:56:31.666Z",
+        "updatedAt": "2026-09-11T04:56:31.666Z",
+        "campus": {
+          "name": "中央校区"
+        },
+        "campusName": "中央校区",
+        "guardians": []
+      },
+      "student2": {
+        "id": "96c7025b-5c07-44e2-8ff5-dac3a046a57a",
+        "organizationId": "c101d97e-d961-410f-96fc-5f25613d39ac",
+        "name": "学生乙",
+        "phone": null,
+        "gender": "男",
+        "birthDate": "2017-03-15T00:00:00.000Z",
+        "campusId": "501cc5a3-51eb-4a88-a2e4-3ff90fbd9ae8",
+        "remark": null,
+        "isActive": true,
+        "createdAt": "2026-09-11T04:56:31.673Z",
+        "updatedAt": "2026-09-11T04:56:31.673Z",
+        "campus": {
+          "name": "中央校区"
+        },
+        "campusName": "中央校区",
+        "guardians": []
+      }
+    },
+    "package": {
+      "id": "7a078bc9-629d-41a8-8b03-b7f1e06d8389",
+      "version": 0,
+      "courseId": "abf4b336-f971-4d07-b5b8-3c72ca430f6a",
+      "name": "民族舞10次课",
+      "description": "白盒E2E",
+      "creditCount": 10,
+      "validityMonths": 12,
+      "priceCents": 168000,
+      "absentDeductsCredit": true,
+      "lateCancellationDeductsCredit": true,
+      "status": "DRAFT",
+      "createdAt": "2026-09-11T04:56:31.693Z",
+      "updatedAt": "2026-09-11T04:56:31.693Z",
+      "courseName": "民族舞",
+      "soldCount": 0
+    },
+    "purchases": [
+      "505b2fd2-e7c8-4b89-85db-1e472d50d4d3",
+      "b0c20479-4438-44c4-93ed-f7afd985981a"
+    ],
+    "entitlements": [
+      "9b7748e2-9b81-4999-a366-9ce799d17368",
+      "f489fd4f-da42-4ba6-b974-7d101f5653b7"
+    ],
+    "creditLifecycle": {
+      "lateCancellation": {
+        "packageId": "ebdd8b4f-04e1-4afd-a752-2965bebcedf0",
+        "entitlementId": "f56d1580-3223-4435-bb0a-330a71c71651",
+        "sessionId": "89da2e86-25cb-4603-bd27-b1f7b1c25050",
+        "bookingId": "e3605b0d-864f-4926-97ce-183852dee7f4"
+      },
+      "automaticAbsence": {
+        "packageId": "32951eac-d5fd-41f6-a2bc-e8ceecd77e18",
+        "entitlementId": "05cd9414-4813-42e4-9402-796e465fd07d",
+        "sessionId": "cd39484b-f39a-48c7-9257-436d90f2b350",
+        "bookingId": "0d711552-32d9-466a-b4c2-0a1205335743"
+      }
+    }
+  },
+  "databaseEvidence": {
+    "creditLifecycle": {
+      "lateCancellation": {
+        "reservationStatus": "CONSUMED",
+        "consumeCount": 1,
+        "consumeDelta": -1
+      },
+      "automaticAbsence": {
+        "reservationStatus": "CONSUMED",
+        "consumeCount": 1,
+        "consumeDelta": -1
+      }
+    },
+    "persistence": {
+      "server_version": "16.15",
+      "database": "kebao_e2e",
+      "organization": {
+        "id": "c101d97e-d961-410f-96fc-5f25613d39ac",
+        "code": "BD",
+        "name": "BD",
+        "isActive": true
+      },
+      "counts": {
+        "campuses": 1,
+        "classrooms": 1,
+        "courses": 4,
+        "users": 5,
+        "students": 2,
+        "sessions": 9,
+        "bookings": 6,
+        "packages": 4,
+        "purchases": 6,
+        "entitlements": 6,
+        "ledgers": 18
+      }
+    }
+  },
+  "findings": [],
+  "summary": {
+    "total": 119,
+    "passed": 119,
+    "failed": 0,
+    "findings": 0,
+    "fatal": false
+  }
+}

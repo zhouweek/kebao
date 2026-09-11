@@ -757,6 +757,7 @@ describe("SchedulingService notifications", () => {
           title: "停课",
           content: "课程已停课",
           sessionId: "session-1",
+          entitlementId: "entitlement-1",
           readAt: null,
           createdAt: NOW,
         },
@@ -769,7 +770,10 @@ describe("SchedulingService notifications", () => {
     ).rejects.toMatchObject({ code: "NOTIFICATION_NOT_FOUND" });
     const read = await service.markNotificationRead("notice-1", "guardian-1");
 
-    expect(read.readAt).toEqual(NOW);
+    expect(read).toMatchObject({
+      entitlementId: "entitlement-1",
+      readAt: NOW,
+    });
     await expect(service.listNotifications("guardian-1", true)).resolves.toEqual([]);
   });
 });

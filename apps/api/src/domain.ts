@@ -1,6 +1,13 @@
 import type { AuthRepository } from "./auth.js";
 import type { PlatformRepository } from "./platform.js";
 import type { MasterDataRepository } from "./master-data.js";
+import type { CoursePackageRepository } from "./course-packages.js";
+import {
+  shanghaiBusinessDate,
+  type CreditLedger,
+  type CreditReservation,
+  type StudentCourseEntitlement,
+} from "./course-packages.js";
 
 export type SessionStatus =
   | "DRAFT"
@@ -97,6 +104,7 @@ export interface Booking {
   id: string;
   sessionId: string;
   studentId: string;
+  entitlementId?: string | null;
   status: BookingStatus;
   createdAt: Date;
 }
@@ -141,7 +149,11 @@ export type NotificationType =
   | "BOOKING_CONFIRMED"
   | "BOOKING_CANCELLED"
   | "SESSION_REMINDER_24H"
-  | "SESSION_REMINDER_2H";
+  | "SESSION_REMINDER_2H"
+  | "COURSE_PACKAGE_PURCHASED"
+  | "ENTITLEMENT_LOW_BALANCE"
+  | "ENTITLEMENT_EXPIRING"
+  | "ENTITLEMENT_EXPIRED";
 export type NotificationDeliveryStatus =
   | "PENDING"
   | "SENDING"
@@ -156,6 +168,7 @@ export interface Notification {
   title: string;
   content: string;
   sessionId: string | null;
+  entitlementId: string | null;
   idempotencyKey?: string | null;
   readAt: Date | null;
   createdAt: Date;
@@ -239,7 +252,11 @@ export interface CreateSessionInput {
   cancelDeadlineAt?: Date;
 }
 
-export interface Repository extends AuthRepository, PlatformRepository, MasterDataRepository {
+export interface Repository
+  extends AuthRepository,
+    PlatformRepository,
+    MasterDataRepository,
+    CoursePackageRepository {
   listOrganizationIds(): Promise<string[]>;
   organizationExists(organizationId: string): Promise<boolean>;
   getUserIdentity(organizationId: string, userId: string): Promise<UserIdentity | undefined>;
@@ -332,6 +349,7 @@ const ACTIVE_BOOKING_STATUSES: BookingStatus[] = [
 ];
 
 const ATTENDANCE_STATUSES: AttendanceStatus[] = ["ATTENDED", "LEAVE", "ABSENT"];
+const SETTLEMENT_RETRY_MAX_DELAY_MINUTES = 60;
 
 function overlaps(
   firstStart: Date,
@@ -838,7 +856,7 @@ export class SchedulingService {
   }
 
   async cancelSession(sessionId: string, reason?: string): Promise<CourseSession> {
-    return this.repository.withSessionLock(this.organizationId, sessionId, async () => {
+    return this.withLockedSession(sessionId, async () => {
       const session = await this.requireSession(sessionId);
       return this.cancelSessionRecord(session, reason, "THIS");
     });
@@ -859,6 +877,7 @@ export class SchedulingService {
         ACTIVE_BOOKING_STATUSES.includes(booking.status),
     );
     for (const booking of bookings) {
+      await this.correctReservation(booking, "RELEASE", "课次取消");
       await this.repository.saveBooking(this.organizationId, {
         ...booking,
         status: "COURSE_CANCELLED",
@@ -905,7 +924,7 @@ export class SchedulingService {
     studentId: string,
     isAdminOperation: boolean,
   ): Promise<{ booking: Booking; alreadyBooked: boolean }> {
-    return this.repository.withSessionLock(this.organizationId, sessionId, async () => {
+    return this.withLockedSession(sessionId, async () => {
       const session = await this.requireSession(sessionId);
       const student = await this.repository.getStudent(this.organizationId, studentId);
       if (!student) {
@@ -976,10 +995,31 @@ export class SchedulingService {
             id: this.createId(),
             sessionId,
             studentId,
+            entitlementId: null,
             status: "CONFIRMED",
             createdAt: currentTime,
           };
+      const previousReservation = existing
+        ? await this.repository.getCreditReservationByBooking(this.organizationId, existing.id)
+        : undefined;
+      const reservation = previousReservation
+        ? await this.reopenReservation(existing!, previousReservation, session, currentTime)
+        : await this.reserveCredit(booking, session, currentTime);
+      booking.entitlementId = reservation?.entitlementId ?? null;
       await this.repository.saveBooking(this.organizationId, booking);
+      if (reservation && !previousReservation) {
+        await this.repository.saveCreditReservation(this.organizationId, reservation);
+        await this.appendLedger({
+          entitlementId: reservation.entitlementId,
+          reservation,
+          booking,
+          type: "RESERVE",
+          creditDelta: 0,
+          reservedCreditDelta: 1,
+          key: `booking:${booking.id}:reserve`,
+          occurredAt: currentTime,
+        });
+      }
       await this.notifyGuardians(
         [booking],
         "BOOKING_CONFIRMED",
@@ -1007,27 +1047,32 @@ export class SchedulingService {
   }
 
   async cancelBooking(bookingId: string): Promise<Booking> {
-    const booking = await this.repository.getBooking(this.organizationId, bookingId);
-    if (!booking) {
+    const initial = await this.repository.getBooking(this.organizationId, bookingId);
+    if (!initial) {
       throw new DomainError("BOOKING_NOT_FOUND", "预约不存在", 404);
     }
-    if (booking.status === "CANCELLED") {
-      return booking;
-    }
-    if (!ACTIVE_BOOKING_STATUSES.includes(booking.status)) {
-      throw new DomainError("BOOKING_NOT_CANCELLABLE", "当前预约不可取消", 409);
-    }
-
-    const session = await this.requireSession(booking.sessionId);
-    if (this.now() >= session.cancelDeadlineAt) {
-      throw new DomainError(
-        "CANCELLATION_DEADLINE_PASSED",
-        "已超过自助取消截止时间，请联系管理员",
-        409,
+    return this.withLockedSession(initial.sessionId, async () => {
+      const booking = await this.repository.getBooking(this.organizationId, bookingId);
+      if (!booking) throw new DomainError("BOOKING_NOT_FOUND", "预约不存在", 404);
+      if (booking.status === "CANCELLED") return booking;
+      if (!ACTIVE_BOOKING_STATUSES.includes(booking.status)) {
+        throw new DomainError("BOOKING_NOT_CANCELLABLE", "当前预约不可取消", 409);
+      }
+      const session = await this.requireSession(booking.sessionId);
+      if (this.now() >= session.cancelDeadlineAt) {
+        throw new DomainError(
+          "CANCELLATION_DEADLINE_PASSED",
+          "已超过自助取消截止时间，请联系管理员",
+          409,
+        );
+      }
+      const reservation = await this.repository.getCreditReservationByBooking(
+        this.organizationId,
+        booking.id,
       );
-    }
-    const cancelled = { ...booking, status: "CANCELLED" as const };
-    await this.repository.withTransaction(async () => {
+      const cancellationCycle = reservation?.updatedAt.getTime() ?? booking.createdAt.getTime();
+      const cancelled = { ...booking, status: "CANCELLED" as const };
+      await this.correctReservation(booking, "RELEASE", "预约提前取消");
       await this.repository.saveBooking(this.organizationId, cancelled);
       await this.notifyGuardians(
         [booking],
@@ -1035,7 +1080,7 @@ export class SchedulingService {
         "预约已取消",
         `${session.courseName}的预约已取消`,
         session.id,
-        `booking-cancelled:${booking.id}`,
+        `booking-cancelled:${booking.id}:${cancellationCycle}`,
       );
       await this.notifyUsers(
         [session.teacherId],
@@ -1043,14 +1088,14 @@ export class SchedulingService {
         "课程预约取消",
         `${(await this.repository.getStudent(this.organizationId, booking.studentId))?.name ?? "学生"}已取消${session.courseName}的预约`,
         session.id,
-        `booking-cancelled:${booking.id}:teacher`,
+        `booking-cancelled:${booking.id}:${cancellationCycle}:teacher`,
       );
       await this.audit("BOOKING_CANCELLED", "Booking", bookingId, {
         sessionId: booking.sessionId,
         studentId: booking.studentId,
       });
+      return cancelled;
     });
-    return cancelled;
   }
 
   async cancelBookingForAdmin(bookingId: string, reason: string): Promise<Booking> {
@@ -1062,54 +1107,71 @@ export class SchedulingService {
     if (!initial) {
       throw new DomainError("BOOKING_NOT_FOUND", "预约不存在", 404);
     }
-    return this.repository.withSessionLock(
-      this.organizationId,
-      initial.sessionId,
-      async () => {
-        const booking = await this.repository.getBooking(this.organizationId, bookingId);
-        if (!booking) {
-          throw new DomainError("BOOKING_NOT_FOUND", "预约不存在", 404);
-        }
-        if (booking.status === "CANCELLED") return booking;
-        if (!ACTIVE_BOOKING_STATUSES.includes(booking.status)) {
-          throw new DomainError("BOOKING_NOT_CANCELLABLE", "当前预约不可取消", 409);
-        }
-        const cancelled = { ...booking, status: "CANCELLED" as const };
-        await this.repository.withTransaction(async () => {
-          const session = await this.requireSession(booking.sessionId);
-          await this.repository.saveBooking(this.organizationId, cancelled);
-          await this.notifyGuardians(
-            [booking],
-            "BOOKING_CANCELLED",
-            "预约已取消",
-            `${session.courseName}的预约已由管理员取消：${normalizedReason}`,
-            session.id,
-            `booking-cancelled:${booking.id}`,
-          );
-          await this.notifyUsers(
-            [session.teacherId],
-            "BOOKING_CANCELLED",
-            "课程预约取消",
-            `${(await this.repository.getStudent(this.organizationId, booking.studentId))?.name ?? "学生"}的${session.courseName}预约已由管理员取消：${normalizedReason}`,
-            session.id,
-            `booking-cancelled:${booking.id}:teacher`,
-          );
-          await this.audit("ADMIN_BOOKING_CANCELLED", "Booking", bookingId, {
-            sessionId: booking.sessionId,
-            studentId: booking.studentId,
-            reason: normalizedReason,
-          });
-        });
-        return cancelled;
-      },
-    );
+    return this.withLockedSession(initial.sessionId, async () => {
+      const booking = await this.repository.getBooking(this.organizationId, bookingId);
+      if (!booking) {
+        throw new DomainError("BOOKING_NOT_FOUND", "预约不存在", 404);
+      }
+      if (booking.status === "CANCELLED") return booking;
+      if (booking.status !== "CONFIRMED") {
+        throw new DomainError("BOOKING_NOT_CANCELLABLE", "当前预约不可取消", 409);
+      }
+      const cancelled = { ...booking, status: "CANCELLED" as const };
+      const session = await this.requireSession(booking.sessionId);
+      if (this.now() >= session.endsAt) {
+        throw new DomainError("BOOKING_NOT_CANCELLABLE", "课次结束后不可取消预约", 409);
+      }
+      const reservation = await this.repository.getCreditReservationByBooking(
+        this.organizationId,
+        booking.id,
+      );
+      const cancellationCycle = reservation?.updatedAt.getTime() ?? booking.createdAt.getTime();
+      const late = this.now() >= session.cancelDeadlineAt;
+      const target = late
+        ? await this.lateCancellationSettlement(booking)
+        : "RELEASE";
+      await this.correctReservation(
+        booking,
+        target,
+        target === "CONSUME"
+          ? `管理员晚取消：${normalizedReason}`
+          : late
+            ? `管理员晚取消释放：${normalizedReason}`
+            : `管理员提前取消：${normalizedReason}`,
+      );
+      await this.repository.saveBooking(this.organizationId, cancelled);
+      await this.notifyGuardians(
+        [booking],
+        "BOOKING_CANCELLED",
+        "预约已取消",
+        `${session.courseName}的预约已由管理员取消：${normalizedReason}`,
+        session.id,
+        `booking-cancelled:${booking.id}:${cancellationCycle}`,
+      );
+      await this.notifyUsers(
+        [session.teacherId],
+        "BOOKING_CANCELLED",
+        "课程预约取消",
+        `${(await this.repository.getStudent(this.organizationId, booking.studentId))?.name ?? "学生"}的${session.courseName}预约已由管理员取消：${normalizedReason}`,
+        session.id,
+        `booking-cancelled:${booking.id}:${cancellationCycle}:teacher`,
+      );
+      await this.audit("ADMIN_BOOKING_CANCELLED", "Booking", bookingId, {
+        sessionId: booking.sessionId,
+        studentId: booking.studentId,
+        reason: normalizedReason,
+        late,
+        settlement: target,
+      });
+      return cancelled;
+    });
   }
 
   async markAttendance(
     sessionId: string,
     records: Array<{ bookingId: string; status: AttendanceStatus }>,
   ): Promise<Booking[]> {
-    return this.repository.withSessionLock(this.organizationId, sessionId, async () => {
+    return this.withLockedSession(sessionId, async () => {
       await this.requireSession(sessionId);
       const uniqueIds = new Set<string>();
       const bookings: Booking[] = [];
@@ -1133,14 +1195,149 @@ export class SchedulingService {
         }
         bookings.push({ ...booking, status: record.status });
       }
-      for (const booking of bookings) {
+      const changedRecords: Booking[] = [];
+      for (let index = 0; index < bookings.length; index += 1) {
+        const booking = bookings[index]!;
+        const previous = await this.repository.getBooking(this.organizationId, booking.id);
+        if (!previous || previous.status === booking.status) continue;
+        const target = await this.attendanceSettlement(booking, booking.status as AttendanceStatus);
+        await this.correctReservation(previous, target, `签到：${booking.status}`);
         await this.repository.saveBooking(this.organizationId, booking);
+        changedRecords.push(booking);
       }
-      await this.audit("ATTENDANCE_UPDATED", "CourseSession", sessionId, {
-        records: bookings.map(({ id, status }) => ({ bookingId: id, status })),
-      });
+      if (changedRecords.length > 0) {
+        await this.audit("ATTENDANCE_UPDATED", "CourseSession", sessionId, {
+          records: changedRecords.map(({ id, status }) => ({ bookingId: id, status })),
+        });
+      }
       return bookings;
     });
+  }
+
+  async settleExpiredReservations(limit = 100): Promise<number> {
+    const timestamp = this.now();
+    let settled = 0;
+    const attemptedReservationIds = new Set<string>();
+    while (settled < limit && attemptedReservationIds.size < limit) {
+      const reservations = await this.repository.listExpiredCreditReservations(
+        this.organizationId,
+        timestamp,
+        limit - attemptedReservationIds.size,
+        [...attemptedReservationIds],
+      );
+      const newCandidates = reservations.filter(
+        (candidate) => !attemptedReservationIds.has(candidate.id),
+      );
+      if (newCandidates.length === 0) break;
+      for (const candidate of newCandidates) {
+        if (attemptedReservationIds.size >= limit) break;
+        attemptedReservationIds.add(candidate.id);
+        let sessionId: string | undefined;
+        try {
+          const initialBooking = await this.repository.getBooking(
+            this.organizationId,
+            candidate.bookingId,
+          );
+          if (!initialBooking) continue;
+          sessionId = initialBooking.sessionId;
+          settled += await this.withLockedSession(initialBooking.sessionId, async () => {
+            const [booking, reservation, session] = await Promise.all([
+              this.repository.getBooking(this.organizationId, candidate.bookingId),
+              this.repository.getCreditReservationByBooking(
+                this.organizationId,
+                candidate.bookingId,
+              ),
+              this.repository.getSession(this.organizationId, initialBooking.sessionId),
+            ]);
+            if (
+              !booking ||
+              !reservation ||
+              !session ||
+              booking.status !== "CONFIRMED" ||
+              reservation.status !== "RESERVED" ||
+              reservation.expiresAt === null ||
+              reservation.expiresAt > timestamp ||
+              session.endsAt > timestamp
+            ) {
+              return 0;
+            }
+            const target = await this.attendanceSettlement(booking, "ABSENT");
+            await this.correctReservation(booking, target, "课次结束未签到自动结算");
+            await this.repository.saveBooking(this.organizationId, {
+              ...booking,
+              status: "ABSENT",
+            });
+            await this.audit("BOOKING_AUTO_SETTLED_ABSENT", "Booking", booking.id, {
+              sessionId: booking.sessionId,
+              settlement: target,
+              reservationId: reservation.id,
+            });
+            return 1;
+          });
+        } catch (error) {
+          const diagnostic = this.errorDiagnostic(error);
+          const failedAt = this.now();
+          const settlementAttemptCount = candidate.settlementAttemptCount + 1;
+          const nextSettlementAttemptAt = new Date(
+            failedAt.getTime() +
+              Math.min(
+                SETTLEMENT_RETRY_MAX_DELAY_MINUTES,
+                2 ** settlementAttemptCount,
+              ) *
+                60_000,
+          );
+          console.error("过期课时预占自动结算失败", {
+            organizationId: this.organizationId,
+            bookingId: candidate.bookingId,
+            reservationId: candidate.id,
+            sessionId: sessionId ?? null,
+            error: diagnostic,
+          });
+          try {
+            await this.repository.saveCreditReservationSettlementFailure(
+              this.organizationId,
+              {
+                id: candidate.id,
+                settlementAttemptCount,
+                nextSettlementAttemptAt,
+                settlementLastError: diagnostic.message.slice(0, 1000),
+                updatedAt: failedAt,
+              },
+              candidate.settlementAttemptCount,
+            );
+          } catch (persistenceError) {
+            console.error("过期课时预占失败状态写入失败", {
+              organizationId: this.organizationId,
+              bookingId: candidate.bookingId,
+              reservationId: candidate.id,
+              settlementError: diagnostic,
+              persistenceError: this.errorDiagnostic(persistenceError),
+            });
+          }
+          try {
+            await this.audit(
+              "BOOKING_AUTO_SETTLEMENT_FAILED",
+              "Booking",
+              candidate.bookingId,
+              {
+                reservationId: candidate.id,
+                sessionId: sessionId ?? null,
+                error: diagnostic,
+              },
+            );
+          } catch (auditError) {
+            console.error("过期课时预占失败审计写入失败", {
+              organizationId: this.organizationId,
+              bookingId: candidate.bookingId,
+              reservationId: candidate.id,
+              settlementError: diagnostic,
+              auditError: this.errorDiagnostic(auditError),
+            });
+          }
+        }
+      }
+    }
+    return settled;
   }
 
   async listNotifications(userId: string, unreadOnly = false): Promise<Notification[]> {
@@ -1240,6 +1437,426 @@ export class SchedulingService {
     return session;
   }
 
+  private async withLockedSession<T>(
+    sessionId: string,
+    action: () => Promise<T>,
+  ): Promise<T> {
+    return this.repository.withTransaction(() =>
+      this.repository.withSessionLock(this.organizationId, sessionId, action),
+    );
+  }
+
+  private async reserveCredit(
+    booking: Booking,
+    session: CourseSession,
+    timestamp: Date,
+  ): Promise<CreditReservation | undefined> {
+    const businessDate = shanghaiBusinessDate(session.startsAt);
+    const entitlements = await this.repository.listUsableStudentEntitlements(
+      this.organizationId,
+      booking.studentId,
+      session.courseId,
+      businessDate,
+    );
+    const entitlement = entitlements.find(
+      (item) => item.remainingCredits - item.reservedCredits >= 1,
+    );
+    if (!entitlement) {
+      const configuredPackages = await this.repository.listCoursePackages(this.organizationId, {
+        page: 1,
+        pageSize: 1,
+        courseId: session.courseId,
+      });
+      // 兼容启用课包前产生的机构数据；一旦课程配置过课包，即强制使用权益。
+      if (configuredPackages.total === 0) return undefined;
+      throw new DomainError("INSUFFICIENT_COURSE_CREDITS", "该课程没有可用课时权益", 409);
+    }
+    const updated: StudentCourseEntitlement = {
+      ...entitlement,
+      reservedCredits: entitlement.reservedCredits + 1,
+      version: entitlement.version + 1,
+      updatedAt: timestamp,
+    };
+    if (
+      !(await this.repository.saveStudentEntitlement(
+        this.organizationId,
+        updated,
+        entitlement.version,
+      ))
+    ) {
+      throw new DomainError("ENTITLEMENT_CONFLICT", "权益已被其他操作修改，请重试", 409);
+    }
+    return {
+      id: this.createId(),
+      entitlementId: entitlement.id,
+      bookingId: booking.id,
+      credits: 1,
+      status: "RESERVED",
+      expiresAt: session.endsAt,
+      releasedAt: null,
+      consumedAt: null,
+      settlementAttemptCount: 0,
+      nextSettlementAttemptAt: null,
+      settlementLastError: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+  }
+
+  private async attendanceSettlement(
+    booking: Booking,
+    status: AttendanceStatus,
+  ): Promise<"CONSUME" | "RELEASE"> {
+    if (status === "ATTENDED") return "CONSUME";
+    if (status === "LEAVE") return "RELEASE";
+    const reservation = await this.repository.getCreditReservationByBooking(
+      this.organizationId,
+      booking.id,
+    );
+    if (!reservation) return "RELEASE";
+    const entitlement = await this.repository.getStudentEntitlement(
+      this.organizationId,
+      reservation.entitlementId,
+    );
+    if (!entitlement) throw new DomainError("ENTITLEMENT_NOT_FOUND", "预约权益不存在", 409);
+    const purchase = await this.repository.getCoursePurchase(
+      this.organizationId,
+      entitlement.purchaseId,
+    );
+    if (!purchase) throw new DomainError("COURSE_PURCHASE_NOT_FOUND", "权益购买记录不存在", 409);
+    return purchase.absentDeductsCreditSnapshot ? "CONSUME" : "RELEASE";
+  }
+
+  private async lateCancellationSettlement(
+    booking: Booking,
+  ): Promise<"CONSUME" | "RELEASE"> {
+    const reservation = await this.repository.getCreditReservationByBooking(
+      this.organizationId,
+      booking.id,
+    );
+    if (!reservation) return "RELEASE";
+    const entitlement = await this.repository.getStudentEntitlement(
+      this.organizationId,
+      reservation.entitlementId,
+    );
+    if (!entitlement) throw new DomainError("ENTITLEMENT_NOT_FOUND", "预约权益不存在", 409);
+    const purchase = await this.repository.getCoursePurchase(
+      this.organizationId,
+      entitlement.purchaseId,
+    );
+    if (!purchase) throw new DomainError("COURSE_PURCHASE_NOT_FOUND", "权益购买记录不存在", 409);
+    return purchase.lateCancellationDeductsCreditSnapshot ? "CONSUME" : "RELEASE";
+  }
+
+  private async correctReservation(
+    previousBooking: Booking,
+    target: "CONSUME" | "RELEASE",
+    note: string,
+  ): Promise<void> {
+    const reservation = await this.repository.getCreditReservationByBooking(
+      this.organizationId,
+      previousBooking.id,
+    );
+    if (!reservation) return;
+    if (reservation.status === "RESERVED") {
+      await this.settleReservation(previousBooking, target, note);
+      return;
+    }
+    const currentEffect = reservation.status === "CONSUMED" ? "CONSUME" : "RELEASE";
+    if (currentEffect === target) return;
+    const ledgers = await this.repository.listCreditLedgers(
+      this.organizationId,
+      reservation.entitlementId,
+    );
+    const reversedIds = new Set(
+      ledgers.filter((item) => item.type === "REVERSAL" && item.reversalOfId).map((item) => item.reversalOfId!),
+    );
+    const original = ledgers.find(
+      (item) =>
+        item.bookingId === previousBooking.id &&
+        item.type === currentEffect &&
+        !reversedIds.has(item.id),
+    );
+    if (!original) {
+      throw new DomainError("LEDGER_STATE_CONFLICT", "预约课时流水状态不一致", 409);
+    }
+    const entitlement = await this.requireRawEntitlement(reservation.entitlementId);
+    if (
+      currentEffect === "RELEASE" &&
+      target === "CONSUME" &&
+      entitlement.remainingCredits - entitlement.reservedCredits < reservation.credits
+    ) {
+      throw new DomainError(
+        "RESERVATION_RESTORE_INSUFFICIENT_CREDITS",
+        "当前权益可用余额不足，无法恢复原预约预占",
+        409,
+      );
+    }
+    const timestamp = this.now();
+    const reversedEntitlement: StudentCourseEntitlement = {
+      ...entitlement,
+      remainingCredits: entitlement.remainingCredits - original.creditDelta,
+      reservedCredits: entitlement.reservedCredits - original.reservedCreditDelta,
+      status: this.entitlementStatusAfterBalance(
+        entitlement,
+        entitlement.remainingCredits - original.creditDelta,
+        timestamp,
+      ),
+      version: entitlement.version + 1,
+      updatedAt: timestamp,
+    };
+    await this.saveEntitlementCas(entitlement, reversedEntitlement);
+    await this.repository.saveCreditLedger(this.organizationId, {
+      id: this.createId(),
+      entitlementId: entitlement.id,
+      purchaseId: null,
+      reservationId: null,
+      bookingId: null,
+      idempotencyKey: `booking:${previousBooking.id}:reversal:${original.id}`,
+      type: "REVERSAL",
+      creditDelta: -original.creditDelta,
+      balanceAfter: reversedEntitlement.remainingCredits,
+      reservedCreditDelta: -original.reservedCreditDelta,
+      reservedBalanceAfter: reversedEntitlement.reservedCredits,
+      reversalOfId: original.id,
+      actorId: this.actorId,
+      note: `冲正：${note}`,
+      occurredAt: timestamp,
+      createdAt: timestamp,
+    });
+    await this.repository.saveCreditReservation(this.organizationId, {
+      ...reservation,
+      status: "RESERVED",
+      releasedAt: null,
+      consumedAt: null,
+      updatedAt: timestamp,
+    });
+    await this.settleReservation(previousBooking, target, note);
+  }
+
+  private async reopenReservation(
+    booking: Booking,
+    reservation: CreditReservation,
+    session: CourseSession,
+    timestamp: Date,
+  ): Promise<CreditReservation> {
+    if (reservation.status === "RESERVED") return reservation;
+    if (reservation.status !== "RELEASED") {
+      throw new DomainError("RESERVATION_STATE_CONFLICT", "已核销预约不可重新预约", 409);
+    }
+    const ledgers = await this.repository.listCreditLedgers(
+      this.organizationId,
+      reservation.entitlementId,
+    );
+    const reversedIds = new Set(
+      ledgers.filter((item) => item.type === "REVERSAL" && item.reversalOfId).map((item) => item.reversalOfId!),
+    );
+    const released = ledgers.find(
+      (item) =>
+        item.bookingId === booking.id &&
+        item.type === "RELEASE" &&
+        !reversedIds.has(item.id),
+    );
+    if (!released) {
+      throw new DomainError("LEDGER_STATE_CONFLICT", "预约释放流水不存在", 409);
+    }
+    const entitlement = await this.repository.getStudentEntitlement(
+      this.organizationId,
+      reservation.entitlementId,
+    );
+    const businessDate = shanghaiBusinessDate(session.startsAt);
+    if (
+      !entitlement ||
+      entitlement.studentId !== booking.studentId ||
+      entitlement.courseId !== session.courseId ||
+      entitlement.status !== "ACTIVE" ||
+      entitlement.validFrom > businessDate ||
+      entitlement.validUntil < businessDate ||
+      entitlement.remainingCredits - entitlement.reservedCredits < 1
+    ) {
+      throw new DomainError(
+        "INSUFFICIENT_COURSE_CREDITS",
+        "原预约权益已失效或课时余额不足",
+        409,
+      );
+    }
+    const updated: StudentCourseEntitlement = {
+      ...entitlement,
+      reservedCredits: entitlement.reservedCredits + 1,
+      version: entitlement.version + 1,
+      updatedAt: timestamp,
+    };
+    await this.saveEntitlementCas(entitlement, updated);
+    await this.repository.saveCreditLedger(this.organizationId, {
+      id: this.createId(),
+      entitlementId: entitlement.id,
+      purchaseId: null,
+      reservationId: null,
+      bookingId: null,
+      idempotencyKey: `booking:${booking.id}:rebook-reversal:${released.id}`,
+      type: "REVERSAL",
+      creditDelta: 0,
+      balanceAfter: updated.remainingCredits,
+      reservedCreditDelta: 1,
+      reservedBalanceAfter: updated.reservedCredits,
+      reversalOfId: released.id,
+      actorId: this.actorId,
+      note: "取消后重新预约",
+      occurredAt: timestamp,
+      createdAt: timestamp,
+    });
+    const reopened = {
+      ...reservation,
+      status: "RESERVED" as const,
+      expiresAt: session.endsAt,
+      releasedAt: null,
+      consumedAt: null,
+      updatedAt: timestamp,
+    };
+    await this.repository.saveCreditReservation(this.organizationId, reopened);
+    return reopened;
+  }
+
+  private async settleReservation(
+    booking: Booking,
+    target: "CONSUME" | "RELEASE",
+    note: string,
+  ): Promise<void> {
+    const reservation = await this.repository.getCreditReservationByBooking(
+      this.organizationId,
+      booking.id,
+    );
+    if (!reservation) return;
+    if (
+      (target === "CONSUME" && reservation.status === "CONSUMED") ||
+      (target === "RELEASE" && reservation.status === "RELEASED")
+    ) return;
+    if (reservation.status !== "RESERVED") {
+      throw new DomainError("RESERVATION_STATE_CONFLICT", "课时预占状态不允许当前操作", 409);
+    }
+    const entitlement = await this.requireRawEntitlement(reservation.entitlementId);
+    const timestamp = this.now();
+    const consume = target === "CONSUME";
+    const updated: StudentCourseEntitlement = {
+      ...entitlement,
+      remainingCredits: entitlement.remainingCredits - (consume ? 1 : 0),
+      reservedCredits: entitlement.reservedCredits - 1,
+      status: this.entitlementStatusAfterBalance(
+        entitlement,
+        entitlement.remainingCredits - (consume ? 1 : 0),
+        timestamp,
+      ),
+      version: entitlement.version + 1,
+      updatedAt: timestamp,
+    };
+    await this.saveEntitlementCas(entitlement, updated);
+    await this.repository.saveCreditReservation(this.organizationId, {
+      ...reservation,
+      status: consume ? "CONSUMED" : "RELEASED",
+      consumedAt: consume ? timestamp : null,
+      releasedAt: consume ? null : timestamp,
+      nextSettlementAttemptAt: null,
+      settlementLastError: null,
+      updatedAt: timestamp,
+    });
+    await this.appendLedger({
+      entitlementId: entitlement.id,
+      reservation,
+      booking,
+      type: target,
+      creditDelta: consume ? -1 : 0,
+      reservedCreditDelta: -1,
+      key: `booking:${booking.id}:${target.toLowerCase()}:${reservation.updatedAt.getTime()}`,
+      occurredAt: timestamp,
+      note,
+    });
+  }
+
+  private async appendLedger(input: {
+    entitlementId: string;
+    reservation: CreditReservation;
+    booking: Booking;
+    type: "RESERVE" | "RELEASE" | "CONSUME";
+    creditDelta: number;
+    reservedCreditDelta: number;
+    key: string;
+    occurredAt: Date;
+    note?: string;
+  }): Promise<void> {
+    const entitlement = await this.requireRawEntitlement(input.entitlementId);
+    const ledger: CreditLedger = {
+      id: this.createId(),
+      entitlementId: input.entitlementId,
+      purchaseId: null,
+      reservationId: input.reservation.id,
+      bookingId: input.booking.id,
+      idempotencyKey: input.key,
+      type: input.type,
+      creditDelta: input.creditDelta,
+      balanceAfter: entitlement.remainingCredits,
+      reservedCreditDelta: input.reservedCreditDelta,
+      reservedBalanceAfter: entitlement.reservedCredits,
+      reversalOfId: null,
+      actorId: this.actorId,
+      note: input.note ?? null,
+      occurredAt: input.occurredAt,
+      createdAt: input.occurredAt,
+    };
+    await this.repository.saveCreditLedger(this.organizationId, ledger);
+  }
+
+  private async requireReservation(bookingId: string): Promise<CreditReservation> {
+    const reservation = await this.repository.getCreditReservationByBooking(
+      this.organizationId,
+      bookingId,
+    );
+    if (!reservation) {
+      throw new DomainError("CREDIT_RESERVATION_NOT_FOUND", "预约课时预占不存在", 409);
+    }
+    return reservation;
+  }
+
+  private async requireRawEntitlement(id: string): Promise<StudentCourseEntitlement> {
+    const entitlement = await this.repository.getStudentEntitlement(this.organizationId, id);
+    if (!entitlement) throw new DomainError("ENTITLEMENT_NOT_FOUND", "学生权益不存在", 409);
+    return entitlement;
+  }
+
+  private async saveEntitlementCas(
+    previous: StudentCourseEntitlement,
+    next: StudentCourseEntitlement,
+  ): Promise<void> {
+    if (
+      !(await this.repository.saveStudentEntitlement(
+        this.organizationId,
+        next,
+        previous.version,
+      ))
+    ) {
+      throw new DomainError("ENTITLEMENT_CONFLICT", "权益已被其他操作修改，请重试", 409);
+    }
+  }
+
+  private entitlementStatusAfterBalance(
+    entitlement: StudentCourseEntitlement,
+    remainingCredits: number,
+    timestamp: Date,
+  ): StudentCourseEntitlement["status"] {
+    if (entitlement.status === "CANCELLED") return "CANCELLED";
+    if (remainingCredits === 0) return "EXHAUSTED";
+    return entitlement.validUntil < shanghaiBusinessDate(timestamp) ? "EXPIRED" : "ACTIVE";
+  }
+
+  private errorDiagnostic(error: unknown): { name: string; message: string; code?: string } {
+    if (error instanceof DomainError) {
+      return { name: error.name, message: error.message, code: error.code };
+    }
+    if (error instanceof Error) {
+      return { name: error.name, message: error.message };
+    }
+    return { name: "UnknownError", message: String(error) };
+  }
+
   private async notifyGuardians(
     bookings: Booking[],
     type: NotificationType,
@@ -1283,6 +1900,7 @@ export class SchedulingService {
         title,
         content,
         sessionId,
+        entitlementId: null,
         idempotencyKey,
         readAt: null,
         createdAt: this.now(),

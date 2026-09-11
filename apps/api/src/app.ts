@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import Fastify, { type FastifyInstance } from "fastify";
 import { AnalyticsService, type AnalyticsFilter } from "./analytics.js";
 import { AuthService, type AuthUser } from "./auth.js";
+import { registerCoursePackageRoutes } from "./course-packages.js";
 import {
   DomainError,
   SchedulingService,
@@ -211,7 +212,7 @@ export function buildApp(
   const serviceFor = (identity: UserIdentity) =>
     new SchedulingService(
       repository,
-      undefined,
+      options.now,
       undefined,
       identity.organizationId,
       identity.id,
@@ -258,7 +259,10 @@ export function buildApp(
     if (origin && corsOrigins.has(origin)) {
       reply.header("Access-Control-Allow-Origin", origin);
       reply.header("Access-Control-Allow-Credentials", "true");
-      reply.header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-Id");
+      reply.header(
+        "Access-Control-Allow-Headers",
+        "Authorization, Content-Type, X-Request-Id, Idempotency-Key",
+      );
       reply.header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
       reply.header("Vary", "Origin");
     }
@@ -658,6 +662,13 @@ export function buildApp(
         page: parsePositiveInteger(query.page, 1, "page", 1_000_000),
         pageSize: parsePositiveInteger(query.pageSize, 20, "pageSize", 100),
       };
+      if ((filter.page - 1) * filter.pageSize > 10_000) {
+        throw new DomainError(
+          "INVALID_PAGINATION",
+          "分页偏移量不能超过 10000",
+          400,
+        );
+      }
       if (query.sessionId) filter.sessionId = query.sessionId;
       if (query.studentId) filter.studentId = query.studentId;
       if (query.status) filter.status = query.status;
@@ -1253,6 +1264,7 @@ export function buildApp(
   );
 
   registerMasterDataRoutes(app, repository, authorize(["ADMIN"]));
+  registerCoursePackageRoutes(app, repository, authorize(["ADMIN"]), options.now);
   registerPlatformRoutes(app, repository, {
     tokenSecret:
       options.platformTokenSecret ??

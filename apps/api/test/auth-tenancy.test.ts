@@ -25,7 +25,7 @@ const session: CourseSession = {
   cancelDeadlineAt: new Date("2026-09-02T06:00:00.000Z"),
 };
 
-function createApp() {
+function createApp(now?: () => Date) {
   const repository = new MemoryRepository({
     organizations: ["org-a", "org-b"],
     users: [
@@ -56,7 +56,10 @@ function createApp() {
       },
     ],
   });
-  const app = buildApp(repository, { developmentIdentityEnabled: true });
+  const app = buildApp(repository, {
+    developmentIdentityEnabled: true,
+    ...(now ? { now } : {}),
+  });
   apps.push(app);
   return app;
 }
@@ -649,8 +652,30 @@ describe("管理员预约 API", () => {
     expect(invalidPage.json().error.code).toBe("INVALID_PAGINATION");
   });
 
-  it("代取消要求原因、越过家长截止时间并写入审计日志", async () => {
+  it("后台预约分页允许 offset=10000，拒绝更大的 offset", async () => {
     const app = createApp();
+    const boundary = await app.inject({
+      method: "GET",
+      url: "/admin/bookings?page=101&pageSize=100",
+      headers: headers(),
+    });
+    const oversized = await app.inject({
+      method: "GET",
+      url: "/admin/bookings?page=102&pageSize=100",
+      headers: headers(),
+    });
+
+    expect(boundary.statusCode).toBe(200);
+    expect(boundary.json().data.items).toEqual([]);
+    expect(oversized.statusCode).toBe(400);
+    expect(oversized.json().error).toMatchObject({
+      code: "INVALID_PAGINATION",
+      message: "分页偏移量不能超过 10000",
+    });
+  });
+
+  it("代取消要求原因、越过家长截止时间并写入审计日志", async () => {
+    const app = createApp(() => new Date("2026-09-02T09:00:00.000Z"));
     const missingReason = await app.inject({
       method: "POST",
       url: "/admin/bookings/booking-a/cancel",

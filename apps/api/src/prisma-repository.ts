@@ -38,6 +38,23 @@ import type {
   MasterDataQuery,
   MasterResource,
 } from "./master-data.js";
+import type {
+  CoursePackage,
+  CoursePackageListItem,
+  CoursePurchase,
+  CoursePurchaseListItem,
+  CreditLedger,
+  CreditReservation,
+  EntitlementValidityChange,
+  EntitlementListItem,
+  Page,
+  PageQuery,
+  StudentCourseEntitlement,
+} from "./course-packages.js";
+import {
+  coursePackagePageOffset,
+  creditLedgerTypesMatchingKeyword,
+} from "./course-packages.js";
 
 type SessionRow = PrismaSession & {
   course: { name: string };
@@ -873,6 +890,547 @@ export class PrismaRepository implements Repository, PlatformRepository {
     };
   }
 
+  async listCoursePackages(
+    organizationId: string,
+    query: PageQuery,
+  ): Promise<Page<CoursePackageListItem>> {
+    const offset = coursePackagePageOffset(query);
+    const where: Prisma.CoursePackageWhereInput = {
+      organizationId,
+      ...(query.courseId ? { courseId: query.courseId } : {}),
+      ...(query.status ? { status: query.status as CoursePackage["status"] } : {}),
+      ...(query.keyword
+        ? {
+            OR: [
+              { name: { contains: query.keyword, mode: "insensitive" } },
+              { description: { contains: query.keyword, mode: "insensitive" } },
+              { course: { name: { contains: query.keyword, mode: "insensitive" } } },
+            ],
+          }
+        : {}),
+    };
+    const total = await this.client.coursePackage.count({ where });
+    if (offset >= total) {
+      return { items: [], page: query.page, pageSize: query.pageSize, total };
+    }
+    const rows = await this.client.coursePackage.findMany({
+      where,
+      skip: offset,
+      take: query.pageSize,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      include: {
+        course: { select: { name: true } },
+        _count: { select: { purchases: { where: { status: "PAID" } } } },
+      },
+    });
+    return {
+      items: rows.map(({ course, _count, organizationId: _organizationId, ...row }) => ({
+        ...row,
+        courseName: course.name,
+        soldCount: _count.purchases,
+      })),
+      page: query.page,
+      pageSize: query.pageSize,
+      total,
+    };
+  }
+
+  async getCoursePackage(
+    organizationId: string,
+    id: string,
+  ): Promise<CoursePackageListItem | undefined> {
+    const row = await this.client.coursePackage.findFirst({
+      where: { id, organizationId },
+      include: {
+        course: { select: { name: true } },
+        _count: { select: { purchases: { where: { status: "PAID" } } } },
+      },
+    });
+    if (!row) return undefined;
+    const { course, _count, organizationId: _organizationId, ...item } = row;
+    return { ...item, courseName: course.name, soldCount: _count.purchases };
+  }
+
+  async saveCoursePackage(
+    organizationId: string,
+    item: CoursePackage,
+    expectedVersion?: number,
+  ): Promise<boolean> {
+    const data = {
+      version: item.version,
+      courseId: item.courseId,
+      name: item.name,
+      description: item.description,
+      creditCount: item.creditCount,
+      validityMonths: item.validityMonths,
+      priceCents: item.priceCents,
+      absentDeductsCredit: item.absentDeductsCredit,
+      lateCancellationDeductsCredit: item.lateCancellationDeductsCredit,
+      status: item.status,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+    };
+    try {
+      if (expectedVersion === undefined) {
+        await this.client.coursePackage.create({
+          data: { id: item.id, organizationId, ...data },
+        });
+        return true;
+      }
+      const updated = await this.client.coursePackage.updateMany({
+        where: { id: item.id, organizationId, version: expectedVersion },
+        data,
+      });
+      return updated.count === 1;
+    } catch (error) {
+      if (this.isUniqueConstraint(error)) {
+        throw new DomainError("COURSE_PACKAGE_DUPLICATE", "课包名称已存在", 409);
+      }
+      throw error;
+    }
+  }
+
+  async findCoursePurchaseByIdempotencyKey(
+    organizationId: string,
+    idempotencyKey: string,
+  ): Promise<CoursePurchaseListItem | undefined> {
+    const row = await this.client.coursePurchase.findUnique({
+      where: { organizationId_idempotencyKey: { organizationId, idempotencyKey } },
+      include: {
+        student: { select: { name: true } },
+        entitlement: { select: { id: true } },
+      },
+    });
+    if (!row?.entitlement) return undefined;
+    const {
+      student,
+      entitlement,
+      organizationId: _organizationId,
+      ...purchase
+    } = row;
+    return { ...purchase, studentName: student.name, entitlementId: entitlement.id };
+  }
+
+  async listCoursePurchases(
+    organizationId: string,
+    query: PageQuery,
+  ): Promise<Page<CoursePurchaseListItem>> {
+    const offset = coursePackagePageOffset(query);
+    const where: Prisma.CoursePurchaseWhereInput = {
+      organizationId,
+      entitlement: { isNot: null },
+      ...(query.studentId ? { studentId: query.studentId } : {}),
+      ...(query.courseId ? { courseId: query.courseId } : {}),
+      ...(query.status ? { status: query.status as CoursePurchase["status"] } : {}),
+      ...(query.keyword
+        ? {
+            OR: [
+              { packageNameSnapshot: { contains: query.keyword, mode: "insensitive" } },
+              { courseNameSnapshot: { contains: query.keyword, mode: "insensitive" } },
+              { student: { name: { contains: query.keyword, mode: "insensitive" } } },
+            ],
+          }
+        : {}),
+    };
+    const total = await this.client.coursePurchase.count({ where });
+    if (offset >= total) {
+      return { items: [], page: query.page, pageSize: query.pageSize, total };
+    }
+    const rows = await this.client.coursePurchase.findMany({
+      where,
+      skip: offset,
+      take: query.pageSize,
+      orderBy: [{ purchasedAt: "desc" }, { id: "desc" }],
+      include: {
+        student: { select: { name: true } },
+        entitlement: { select: { id: true } },
+      },
+    });
+    return {
+      items: rows.flatMap(
+        ({ student, entitlement, organizationId: _organizationId, ...purchase }) =>
+          entitlement
+            ? [{ ...purchase, studentName: student.name, entitlementId: entitlement.id }]
+            : [],
+      ),
+      page: query.page,
+      pageSize: query.pageSize,
+      total,
+    };
+  }
+
+  async saveCoursePurchase(organizationId: string, item: CoursePurchase): Promise<void> {
+    try {
+      await this.client.coursePurchase.create({ data: { ...item, organizationId } });
+    } catch (error) {
+      if (this.isUniqueConstraint(error)) {
+        throw new DomainError("IDEMPOTENCY_KEY_CONFLICT", "幂等键已用于其他购买请求", 409);
+      }
+      throw error;
+    }
+  }
+
+  async listStudentEntitlements(
+    organizationId: string,
+    query: PageQuery,
+  ): Promise<Page<EntitlementListItem>> {
+    const offset = coursePackagePageOffset(query);
+    const where: Prisma.StudentCourseEntitlementWhereInput = {
+      organizationId,
+      ...(query.studentId ? { studentId: query.studentId } : {}),
+      ...(query.courseId ? { courseId: query.courseId } : {}),
+      ...(query.status ? { status: query.status as StudentCourseEntitlement["status"] } : {}),
+      ...(query.keyword
+        ? {
+            OR: [
+              { student: { name: { contains: query.keyword, mode: "insensitive" } } },
+              {
+                purchase: {
+                  packageNameSnapshot: { contains: query.keyword, mode: "insensitive" },
+                },
+              },
+              {
+                purchase: {
+                  courseNameSnapshot: { contains: query.keyword, mode: "insensitive" },
+                },
+              },
+            ],
+          }
+        : {}),
+    };
+    const include = {
+      student: { select: { name: true } },
+      purchase: {
+        select: {
+          packageNameSnapshot: true,
+          courseNameSnapshot: true,
+        },
+      },
+    } satisfies Prisma.StudentCourseEntitlementInclude;
+    const total = await this.client.studentCourseEntitlement.count({ where });
+    if (offset >= total) {
+      return { items: [], page: query.page, pageSize: query.pageSize, total };
+    }
+    const rows = await this.client.studentCourseEntitlement.findMany({
+      where,
+      skip: offset,
+      take: query.pageSize,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      include,
+    });
+    return {
+      items: rows.map(({ student, purchase, organizationId: _organizationId, ...item }) => ({
+        ...item,
+        studentName: student.name,
+        packageName: purchase.packageNameSnapshot,
+        courseName: purchase.courseNameSnapshot,
+      })),
+      page: query.page,
+      pageSize: query.pageSize,
+      total,
+    };
+  }
+
+  async getStudentEntitlement(
+    organizationId: string,
+    id: string,
+  ): Promise<EntitlementListItem | undefined> {
+    const row = await this.client.studentCourseEntitlement.findFirst({
+      where: { id, organizationId },
+      include: {
+        student: { select: { name: true } },
+        purchase: {
+          select: {
+            packageNameSnapshot: true,
+            courseNameSnapshot: true,
+          },
+        },
+      },
+    });
+    if (!row) return undefined;
+    const {
+      student,
+      purchase,
+      organizationId: _organizationId,
+      ...item
+    } = row;
+    return {
+      ...item,
+      studentName: student.name,
+      packageName: purchase.packageNameSnapshot,
+      courseName: purchase.courseNameSnapshot,
+    };
+  }
+
+  async saveStudentEntitlement(
+    organizationId: string,
+    item: StudentCourseEntitlement,
+    expectedVersion?: number,
+  ): Promise<boolean> {
+    if (expectedVersion === undefined) {
+      await this.client.studentCourseEntitlement.create({ data: { ...item, organizationId } });
+      return true;
+    }
+    const updated = await this.client.studentCourseEntitlement.updateMany({
+      where: { id: item.id, organizationId, version: expectedVersion },
+      data: {
+        remainingCredits: item.remainingCredits,
+        reservedCredits: item.reservedCredits,
+        version: item.version,
+        validUntil: item.validUntil,
+        status: item.status,
+        updatedAt: item.updatedAt,
+      },
+    });
+    return updated.count === 1;
+  }
+
+  async listUsableStudentEntitlements(
+    organizationId: string,
+    studentId: string,
+    courseId: string,
+    businessDate: Date,
+  ): Promise<StudentCourseEntitlement[]> {
+    const rows = await this.client.studentCourseEntitlement.findMany({
+      where: {
+        organizationId,
+        studentId,
+        courseId,
+        status: "ACTIVE",
+        validFrom: { lte: businessDate },
+        validUntil: { gte: businessDate },
+      },
+      orderBy: [{ validUntil: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+    });
+    return rows
+      .filter((item) => item.remainingCredits > item.reservedCredits)
+      .map(({ organizationId: _organizationId, ...item }) => item);
+  }
+
+  async getCoursePurchase(
+    organizationId: string,
+    id: string,
+  ): Promise<CoursePurchase | undefined> {
+    const row = await this.client.coursePurchase.findFirst({ where: { id, organizationId } });
+    if (!row) return undefined;
+    const { organizationId: _organizationId, ...item } = row;
+    return item;
+  }
+
+  async getCreditReservationByBooking(
+    organizationId: string,
+    bookingId: string,
+  ): Promise<CreditReservation | undefined> {
+    const row = await this.client.creditReservation.findUnique({
+      where: { organizationId_bookingId: { organizationId, bookingId } },
+    });
+    if (!row) return undefined;
+    const { organizationId: _organizationId, ...item } = row;
+    return item;
+  }
+
+  async listExpiredCreditReservations(
+    organizationId: string,
+    expiresAt: Date,
+    limit: number,
+    excludedReservationIds: readonly string[] = [],
+  ): Promise<CreditReservation[]> {
+    const rows = await this.client.creditReservation.findMany({
+      where: {
+        organizationId,
+        ...(excludedReservationIds.length > 0
+          ? { id: { notIn: [...excludedReservationIds] } }
+          : {}),
+        status: "RESERVED",
+        expiresAt: { lte: expiresAt },
+        OR: [
+          { nextSettlementAttemptAt: null },
+          { nextSettlementAttemptAt: { lte: expiresAt } },
+        ],
+        booking: {
+          status: "CONFIRMED",
+          session: { endsAt: { lte: expiresAt } },
+        },
+      },
+      orderBy: [{ expiresAt: "asc" }, { id: "asc" }],
+      take: limit,
+    });
+    return rows.map(({ organizationId: _organizationId, ...item }) => item);
+  }
+
+  async saveCreditReservation(
+    organizationId: string,
+    item: CreditReservation,
+  ): Promise<void> {
+    await this.client.creditReservation.upsert({
+      where: { organizationId_bookingId: { organizationId, bookingId: item.bookingId } },
+      create: { ...item, organizationId },
+      update: {
+        status: item.status,
+        expiresAt: item.expiresAt,
+        releasedAt: item.releasedAt,
+        consumedAt: item.consumedAt,
+        settlementAttemptCount: item.settlementAttemptCount,
+        nextSettlementAttemptAt: item.nextSettlementAttemptAt,
+        settlementLastError: item.settlementLastError,
+        updatedAt: item.updatedAt,
+      },
+    });
+  }
+
+  async saveCreditReservationSettlementFailure(
+    organizationId: string,
+    item: Pick<
+      CreditReservation,
+      | "id"
+      | "settlementAttemptCount"
+      | "nextSettlementAttemptAt"
+      | "settlementLastError"
+      | "updatedAt"
+    >,
+    expectedAttemptCount: number,
+  ): Promise<boolean> {
+    const result = await this.client.creditReservation.updateMany({
+      where: {
+        id: item.id,
+        organizationId,
+        status: "RESERVED",
+        settlementAttemptCount: expectedAttemptCount,
+      },
+      data: {
+        settlementAttemptCount: item.settlementAttemptCount,
+        nextSettlementAttemptAt: item.nextSettlementAttemptAt,
+        settlementLastError: item.settlementLastError,
+        updatedAt: item.updatedAt,
+      },
+    });
+    return result.count === 1;
+  }
+
+  async expireStudentEntitlements(
+    organizationId: string,
+    businessDate: Date,
+    updatedAt: Date,
+  ): Promise<void> {
+    await this.client.studentCourseEntitlement.updateMany({
+      where: {
+        organizationId,
+        status: "ACTIVE",
+        validUntil: { lt: businessDate },
+      },
+      data: {
+        status: "EXPIRED",
+        version: { increment: 1 },
+        updatedAt,
+      },
+    });
+  }
+
+  async listCreditLedgers(
+    organizationId: string,
+    entitlementId: string,
+  ): Promise<CreditLedger[]> {
+    const rows = await this.client.creditLedger.findMany({
+      where: { organizationId, entitlementId },
+      orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+    });
+    return rows.map(({ organizationId: _organizationId, ...item }) => item);
+  }
+
+  async listCreditLedgerPage(
+    organizationId: string,
+    entitlementId: string,
+    query: PageQuery,
+  ): Promise<Page<CreditLedger>> {
+    const offset = coursePackagePageOffset(query);
+    const keyword = query.keyword?.trim();
+    const matchingTypes = keyword ? creditLedgerTypesMatchingKeyword(keyword) : [];
+    const where: Prisma.CreditLedgerWhereInput = {
+      organizationId,
+      entitlementId,
+      ...(keyword
+        ? {
+            OR: [
+              ...(matchingTypes.length ? [{ type: { in: matchingTypes } }] : []),
+              { note: { contains: keyword, mode: "insensitive" as const } },
+              { actorId: { contains: keyword, mode: "insensitive" as const } },
+            ],
+          }
+        : {}),
+    };
+    const total = await this.client.creditLedger.count({ where });
+    if (offset >= total) {
+      return { items: [], page: query.page, pageSize: query.pageSize, total };
+    }
+    const rows = await this.client.creditLedger.findMany({
+      where,
+      skip: offset,
+      take: query.pageSize,
+      orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+    });
+    return {
+      items: rows.map(({ organizationId: _organizationId, ...item }) => item),
+      page: query.page,
+      pageSize: query.pageSize,
+      total,
+    };
+  }
+
+  async listBookingCreditLedgers(
+    organizationId: string,
+    bookingId: string,
+  ): Promise<CreditLedger[]> {
+    const rows = await this.client.creditLedger.findMany({
+      where: { organizationId, bookingId },
+      orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
+    });
+    return rows.map(({ organizationId: _organizationId, ...item }) => item);
+  }
+
+  async saveCreditLedger(organizationId: string, item: CreditLedger): Promise<void> {
+    await this.client.creditLedger.create({ data: { ...item, organizationId } });
+  }
+
+  async listEntitlementValidityChanges(
+    organizationId: string,
+    entitlementId: string,
+    query: PageQuery,
+  ): Promise<Page<EntitlementValidityChange>> {
+    const offset = coursePackagePageOffset(query);
+    const where: Prisma.EntitlementValidityChangeWhereInput = {
+      organizationId,
+      entitlementId,
+      ...(query.keyword?.trim()
+        ? { reason: { contains: query.keyword.trim(), mode: "insensitive" } }
+        : {}),
+    };
+    const total = await this.client.entitlementValidityChange.count({ where });
+    if (offset >= total) {
+      return { items: [], page: query.page, pageSize: query.pageSize, total };
+    }
+    const rows = await this.client.entitlementValidityChange.findMany({
+      where,
+      skip: offset,
+      take: query.pageSize,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+    return {
+      items: rows.map(({ organizationId: _organizationId, ...item }) => item),
+      page: query.page,
+      pageSize: query.pageSize,
+      total,
+    };
+  }
+
+  async saveEntitlementValidityChange(
+    organizationId: string,
+    item: EntitlementValidityChange,
+  ): Promise<void> {
+    await this.client.entitlementValidityChange.create({
+      data: { ...item, organizationId },
+    });
+  }
+
   async listSessions(
     organizationId: string,
     filter: SessionFilter,
@@ -929,6 +1487,14 @@ export class PrismaRepository implements Repository, PlatformRepository {
         where: { id: session.id },
         create: { id: session.id, ...data },
         update: data,
+      });
+      await this.client.creditReservation.updateMany({
+        where: {
+          organizationId,
+          status: "RESERVED",
+          booking: { sessionId: session.id },
+        },
+        data: { expiresAt: session.endsAt },
       });
     } catch (error) {
       if (this.isExclusionViolation(error)) {
@@ -1006,7 +1572,10 @@ export class PrismaRepository implements Repository, PlatformRepository {
   }
 
   async listBookings(organizationId: string): Promise<Booking[]> {
-    const rows = await this.client.booking.findMany({ where: { organizationId } });
+    const rows = await this.client.booking.findMany({
+      where: { organizationId },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
     return rows.map((row) => this.toBooking(row));
   }
 
@@ -1035,7 +1604,7 @@ export class PrismaRepository implements Repository, PlatformRepository {
         where,
         skip: (filter.page - 1) * filter.pageSize,
         take: filter.pageSize,
-        orderBy: { createdAt: "desc" },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         include: {
           session: {
             select: {
@@ -1121,6 +1690,7 @@ export class PrismaRepository implements Repository, PlatformRepository {
       create: { ...booking, organizationId },
       update: {
         status: booking.status,
+        entitlementId: booking.entitlementId ?? null,
         createdAt: booking.createdAt,
       },
     });
@@ -1151,6 +1721,7 @@ export class PrismaRepository implements Repository, PlatformRepository {
         title: notification.title,
         content: notification.content,
         sessionId: notification.sessionId,
+        entitlementId: notification.entitlementId,
         idempotencyKey: notification.idempotencyKey ?? null,
         readAt: notification.readAt,
       },
@@ -1342,6 +1913,16 @@ export class PrismaRepository implements Repository, PlatformRepository {
     sessionId: string,
     action: () => Promise<T>,
   ): Promise<T> {
+    const existing = this.transactions.getStore();
+    if (existing) {
+      await existing.$queryRaw(
+        Prisma.sql`SELECT "id" FROM "CourseSession"
+                   WHERE "organizationId" = ${organizationId}
+                     AND "id" = ${sessionId}
+                   FOR UPDATE`,
+      );
+      return action();
+    }
     return this.prisma.$transaction(
       async (transaction) => {
         await transaction.$queryRaw(
@@ -1494,6 +2075,7 @@ export class PrismaRepository implements Repository, PlatformRepository {
       id: row.id,
       sessionId: row.sessionId,
       studentId: row.studentId,
+      entitlementId: row.entitlementId,
       status: row.status,
       createdAt: row.createdAt,
     };
@@ -1507,6 +2089,7 @@ export class PrismaRepository implements Repository, PlatformRepository {
       title: row.title,
       content: row.content,
       sessionId: row.sessionId,
+      entitlementId: row.entitlementId,
       idempotencyKey: row.idempotencyKey,
       readAt: row.readAt,
       createdAt: row.createdAt,
@@ -1544,6 +2127,13 @@ export class PrismaRepository implements Repository, PlatformRepository {
     return (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2034"
+    );
+  }
+
+  private isUniqueConstraint(error: unknown): boolean {
+    return (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
     );
   }
 }
